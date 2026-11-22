@@ -1,0 +1,59 @@
+.web
+*.db
+.states
+assets/external/
+
+# Environment variables and secrets
+.env
+.env.*
+.env.example
+
+# Local server-side provider credentials (API keys entered in Settings)
+.local/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE and editor
+.vscode/
+.idea/
+
+# Operating system
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Build and distribution
+build/
+dist/
+*.egg-info/
+
+# Node.js (if frontend tooling is used)
+node_modules/
+.next/
+.vercel/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Build artifacts
+backend.zip
+frontend.zip
+reflex.lock/
