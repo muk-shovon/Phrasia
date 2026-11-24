@@ -5,14 +5,13 @@ import asyncio
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends
 
 from backend.api.deps import require_owner
 from backend.api.errors import fail
 from backend.api.schemas import ReferenceRequest, TextRequest
-from backend.config import MAX_UPLOAD_BYTES
 from backend.db import repository
-from backend.core import detector, documents, plagiarism
+from backend.core import detector, plagiarism
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[Depends(require_owner)])
 
@@ -49,25 +48,6 @@ async def add_reference(payload: ReferenceRequest) -> dict[str, Any]:
         "title": title[:200],
         "word_count": len(text.split()),
     }
-
-
-@router.post("/plagiarism/references/upload", status_code=201)
-async def upload_reference(
-    request: Request,
-    filename: str = Query(default="reference.txt", max_length=255),
-) -> dict[str, Any]:
-    body = await request.body()
-    if len(body) > MAX_UPLOAD_BYTES:
-        raise fail(413, "That file is too large.", "file_too_large")
-    try:
-        text = documents.extract_text(filename, body)
-    except ValueError as exc:
-        raise fail(422, str(exc), "unreadable_file") from exc
-
-    fallback = filename.rsplit(".", 1)[0] or "Untitled reference"
-    title = fallback[:200]
-    reference_id = repository.add_reference_document(title, text, len(text.split()))
-    return {"id": reference_id, "title": title, "word_count": len(text.split())}
 
 
 @router.delete("/plagiarism/references/{reference_id}")

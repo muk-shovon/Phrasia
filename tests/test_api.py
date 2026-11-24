@@ -137,18 +137,6 @@ def test_preferences_validation(client) -> None:
     assert client.put("/api/settings/preferences", json={"preferred_provider": "ovh"}).status_code == 200
 
 
-def test_text_extraction(client) -> None:
-    response = client.post(
-        "/api/documents/extract?filename=note.txt",
-        content="Hello from a text file.".encode("utf-8"),
-        headers={"Content-Type": "application/octet-stream"},
-    )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["text"] == "Hello from a text file."
-    assert body["word_count"] == 5
-
-
 def test_reference_library_and_plagiarism(client) -> None:
     reference = (
         "Remote work changed how teams communicate. Managers traded hallway chats "

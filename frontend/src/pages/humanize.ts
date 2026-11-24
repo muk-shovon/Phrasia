@@ -12,7 +12,6 @@ import {
   toast,
   wordCount,
 } from "../ui";
-import { attachFileInput } from "../ui";
 
 const POLL_MS = 1200;
 
@@ -143,9 +142,7 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     originalArea.value = "";
     wordCountUpdater();
   });
-  const upload = button("Upload .txt / .docx", "secondary", () => undefined);
-  leftTitle.append(clearBtn, upload);
-
+  leftTitle.append(clearBtn);
   const rightPanel = card();
   columns.append(rightPanel);
   const rightTitle = el("div", "mb-4 flex flex-wrap items-center justify-between gap-4");
@@ -214,9 +211,6 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
   rightPanel.append(rightTitle, outputArea, errorNote, toolbar, showDiffToggle, diffHost);
 
   leftPanel.append(leftTitle, originalArea);
-  uploadRegion(leftPanel);
-
-  // ── behaviour ────────────────────────────────────────────────────────────
   let currentJob: JobDetail | null = null;
 
   const wordCountUpdater = (): void => {
@@ -325,25 +319,4 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     }
   }
 
-  function uploadRegion(parent: HTMLElement): void {
-    const region = el("div", "mb-2 flex items-center gap-3");
-    parent.append(region);
-    attachFileInput(upload, ".txt,.md,.markdown,.docx", (file: File) => {
-      void (async () => {
-        upload.textContent = "Reading…";
-        upload.disabled = true;
-        try {
-          const extracted = await api.extractFile(file);
-          originalArea.value = extracted.text;
-          wordCountUpdater();
-          toast(`Loaded ${extracted.filename}.`, "success");
-        } catch (error) {
-          toast(errorMessage(error), "error");
-        } finally {
-          upload.textContent = "Upload .txt / .docx";
-          upload.disabled = false;
-        }
-      })();
-    });
-  }
 }
