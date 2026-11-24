@@ -38,15 +38,14 @@ def test_plagiarism_unrelated_text_is_low() -> None:
     assert report["coverage_percent"] == 0
 
 
-def test_detector_shape_has_label_and_no_percent() -> None:
+def test_detector_shape_has_no_percent_or_verdict() -> None:
     from backend.core import detector
 
     result = detector.analyze("This is a plain, readable sentence. I like it fine.")
-    assert result["label"]
-    assert result["label_description"] == "Local style signal"
-    assert isinstance(result["signals"], list)
-    assert all(s["direction"] in {"formulaic", "conversational", "neutral"} for s in result["signals"])
-    assert "not proof of authorship" in result["disclaimer"]
-    # No percentage / verdict fields in the output
-    assert "percent" not in str(result).lower() or "%" not in str(result)
+    assert "not proof of authorship" in result["disclaimer"].lower()
+    assert isinstance(result["patterns"], list)
+    assert "total_matches" in result
+    assert "percent" not in str(result).lower()
+    assert "%" not in str(result)
     assert "verdict" not in result
+    assert "label" not in result

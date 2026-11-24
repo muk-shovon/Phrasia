@@ -17,7 +17,8 @@ def test_health_and_meta(client) -> None:
     body = meta.json()
     assert body["modes"]
     assert body["intensities"]
-    assert body["disclaimers"]["detector"].startswith("Local style signal")
+    assert "style signal" in body["disclaimers"]["detector"].lower()
+    assert "not proof of authorship" in body["disclaimers"]["detector"].lower()
     assert any(item["id"] == "pollinations" for item in body["providers"])
     assert any(item["id"] == "ovh" for item in body["providers"])
 
@@ -163,12 +164,16 @@ def test_reference_library_and_plagiarism(client) -> None:
 def test_detector_endpoint(client) -> None:
     response = client.post(
         "/api/detector/check",
-        json={"text": "Short, plain writing. It gets to the point. Nothing fancy here."},
+        json={"text": "Furthermore, this is a great question. I hope this helps!"},
     )
     assert response.status_code == 200
     body = response.json()
-    assert body["label"] in {"leans formulaic", "mixed", "leans conversational"}
-    assert body["disclaimer"]
+    assert "not proof of authorship" in body["disclaimer"].lower()
+    assert isinstance(body["patterns"], list)
+    assert "total_matches" in body
+    assert "%" not in str(body)
+    assert "verdict" not in body
+    assert "label" not in body
 
 
 def test_unknown_api_path_is_404(client) -> None:

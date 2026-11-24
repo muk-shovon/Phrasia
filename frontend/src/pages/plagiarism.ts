@@ -7,7 +7,7 @@ import {
 
 export async function renderPlagiarism(root: HTMLElement): Promise<void> {
   root.replaceChildren(
-    pageHead("Similarity Check", "Compare your text against your local reference library and live web search results."),
+    pageHead("Plagiarism", "Compare your text against your local reference library and live web search results."),
   );
 
   const workspace = el("div", "workspace-grid");
@@ -22,7 +22,7 @@ export async function renderPlagiarism(root: HTMLElement): Promise<void> {
   input.classList.add("min-h-[320px]", "md:min-h-[460px]", "flex-1");
   input.addEventListener("input", () => { count.textContent = `${wordCount(input.value).toLocaleString()} words`; });
   const actions = el("div", "mt-5 flex flex-wrap gap-2");
-  const checkBtn = button("Check similarity", "primary", () => void run());
+  const checkBtn = button("Check plagiarism", "primary", () => void run());
   const clearBtn = button("Clear", "ghost", () => { input.value = ""; count.textContent = "0 words"; showEmpty(); }, { size: "sm" });
   actions.append(checkBtn, clearBtn);
   left.append(leftHead, input, actions);
@@ -30,7 +30,7 @@ export async function renderPlagiarism(root: HTMLElement): Promise<void> {
 
   // Right: results
   const right = card("flex flex-col min-w-0");
-  right.append(el("h2", "text-lg font-semibold text-[var(--color-text)] mb-4", "Similarity results"));
+  right.append(el("h2", "text-lg font-semibold text-[var(--color-text)] mb-4", "Plagiarism results"));
   const resultHost = el("div", "flex-1");
   right.append(resultHost);
   workspace.append(right);
@@ -38,7 +38,7 @@ export async function renderPlagiarism(root: HTMLElement): Promise<void> {
 
   function showEmpty(): void {
     clear(resultHost);
-    resultHost.append(emptyState("No check yet", "Paste text on the left and run a similarity check to see local and web matches here.", "◎"));
+    resultHost.append(emptyState("No check yet", "Paste text on the left and run a plagiarism check to see local and web matches here.", "◎"));
   }
   function showLoading(): void {
     clear(resultHost);
@@ -146,7 +146,7 @@ export async function renderPlagiarism(root: HTMLElement): Promise<void> {
       toast(msg, "error");
     } finally {
       setButtonLoading(checkBtn, false);
-      checkBtn.textContent = "Check similarity";
+      checkBtn.textContent = "Check plagiarism";
     }
   }
 

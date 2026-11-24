@@ -5,8 +5,9 @@ import asyncio
 import json
 import logging
 
-from backend.config import CHUNK_CHARS, MAX_INPUT_CHARS, PROVIDER_TIMEOUT_SECONDS
+from backend.config import CHUNK_CHARS, MAX_INPUT_CHARS, MAX_WORDS_PER_REQUEST, PROVIDER_TIMEOUT_SECONDS
 from backend.core import protected_spans
+from backend.core.input_hygiene import clean_invisible_characters
 from backend.core.chunking import assemble_outputs, split_into_chunks
 from backend.core.prompt import (
     HumanizeOptions,
@@ -53,15 +54,23 @@ def create_job(
     provider_id: str | None = None,
 ) -> int:
     """Persist a document, its source version and a queued job with chunks."""
-    cleaned = (text or "").strip()
+    resolved_options = options or HumanizeOptions()
+    cleaned = (text or "")
+    if resolved_options.clean_invisible:
+        cleaned = clean_invisible_characters(cleaned)
+    cleaned = cleaned.strip()
     if not cleaned:
         raise ValueError("There is no text to humanize.")
     if len(cleaned) > MAX_INPUT_CHARS:
         raise ValueError(
             f"The text is longer than the {MAX_INPUT_CHARS:,} character limit."
         )
+    word_count = len(cleaned.split())
+    if word_count > MAX_WORDS_PER_REQUEST:
+        raise ValueError(
+            f"This text is {word_count:,} words. The current limit is {MAX_WORDS_PER_REQUEST:,} words per request. Please shorten it and try again."
+        )
 
-    resolved_options = options or HumanizeOptions()
     chunks = split_into_chunks(cleaned, budget=CHUNK_CHARS)
     if not chunks:
         raise ValueError("There is no text to humanize.")
@@ -82,6 +91,7 @@ def create_job(
                 "keep_quotes": resolved_options.keep_quotes,
                 "deep_humanize": resolved_options.deep_humanize,
                 "remove_em_dashes": resolved_options.remove_em_dashes,
+                "clean_invisible": resolved_options.clean_invisible,
             }
         ),
         total_chunks=len(chunks),

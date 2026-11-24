@@ -4,11 +4,12 @@ A private, single-user writing workspace: paste text, humanize it through anonym
 
 ## What actually works today
 
-- Humanizer: 8 modes, 3 intensities, original vs output panels, per-chunk progress, cancel, retry, export to .txt/.docx
+- Humanizer: 8 modes, 3 intensities, compact original/rewritten panels, per-chunk progress, cancel, retry, export to .txt/.docx, highlight changes (on by default), optional original wording, Clean invisible characters toggle, 1500-word request limit.
+- Style check: local pattern-list report after humanize (before/after tells, remaining patterns, changes to review, words changed %). Not an AI-detector result and not proof of authorship.
 - History: documents + versions, reopen, delete
 - Settings: toggle providers on/off, edit model/base URL, test connection, list models
-- Similarity: local word-shingle + difflib check against the reference library, plus a real web search via `ddgs`
-- Style signal: local heuristic report - no verdict, no percentage
+- Plagiarism: local word-shingle + difflib check against the reference library, plus a real web search via `ddgs`
+- Style signal: local pattern highlights from `backend/core/ai_patterns.json` - no verdict, no percentage
 
 Default providers (all anonymous, verified 2026-11-24):
 - Pollinations: `https://text.pollinations.ai/openai/chat/completions` (~8s for a 300-word rewrite)

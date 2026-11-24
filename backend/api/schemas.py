@@ -15,6 +15,7 @@ class HumanizeRequest(BaseModel):
     keep_quotes: bool = True
     deep_humanize: bool = False
     remove_em_dashes: bool = False
+    clean_invisible: bool = True
     provider_id: str | None = Field(default=None, max_length=60)
 
 
@@ -36,3 +37,8 @@ class ProviderUpdate(BaseModel):
 
 class PreferencesUpdate(BaseModel):
     preferred_provider: str | None = Field(default=None, max_length=60)
+
+
+class DiffRequest(BaseModel):
+    original: str = Field(min_length=1, max_length=MAX_INPUT_CHARS)
+    rewritten: str = Field(default="", max_length=MAX_INPUT_CHARS)

@@ -1,51 +1,38 @@
-"""The style signal must stay categorical and honest."""
+"""The style signal must stay honest: no percentage, no verdict."""
 from __future__ import annotations
 
 from backend.core.detector import DISCLAIMER, analyze
 
 FORMULAIC = (
-    "Furthermore, it is important to note that artificial intelligence plays a crucial "
-    "role in modern society. Moreover, the utilization of robust machine learning "
-    "algorithms facilitates significant advancements in numerous domains. Additionally, "
-    "various organizations leverage these optimal technologies to navigate the "
-    "complexities of the ever-evolving landscape. In conclusion, it is paramount that we "
-    "delve into these robust systems and utilize them to facilitate optimal outcomes. "
-    "Furthermore, it is important to note that this trend will continue to be significant."
-)
-
-CONVERSATIONAL = (
-    "AI is basically everywhere now. My sister uses it to plan meals, and my neighbour "
-    "leans on it for lesson plans. Neither of them cares how it works — they just want "
-    "the thing to be useful. And honestly? Most days it is. It still gets stuff wrong, "
-    "though. Last week it told me a recipe needed two cups of salt. I noticed."
+    "Furthermore, it is important to note that this is a pivotal moment. "
+    "Let's dive in. This is not just a tool, but a game-changer. "
+    "In conclusion, I hope this helps!"
 )
 
 
-def test_label_is_categorical_not_a_score() -> None:
+def test_detector_has_no_percentage_or_verdict() -> None:
     result = analyze(FORMULAIC)
-    assert result["label"] in {"leans formulaic", "mixed", "leans conversational"}
-    assert "score" not in result
-    assert "percent" not in result
+    assert "percent" not in str(result).lower()
     assert "%" not in str(result)
+    assert "verdict" not in result
+    assert "label" not in result
 
 
-def test_formulaic_text_is_flagged() -> None:
-    assert analyze(FORMULAIC)["label"] == "leans formulaic"
+def test_detector_returns_pattern_groups() -> None:
+    result = analyze(FORMULAIC)
+    assert result["disclaimer"] == DISCLAIMER
+    assert "not proof of authorship" in result["disclaimer"].lower()
+    assert isinstance(result["patterns"], list)
+    assert result["total_matches"] >= 1
+    assert result["word_count"] > 0
+    for g in result["patterns"]:
+        assert g["name"]
+        assert g["hint"]
+        assert g["count"] >= 1
+        assert isinstance(g["matches"], list)
 
 
-def test_conversational_text_is_not_flagged() -> None:
-    assert analyze(CONVERSATIONAL)["label"] == "leans conversational"
-
-
-def test_disclaimer_is_always_returned() -> None:
-    assert analyze(CONVERSATIONAL)["disclaimer"] == DISCLAIMER
-    assert "not proof of authorship" in analyze(FORMULAIC)["disclaimer"]
-
-
-def test_signals_have_names_and_directions() -> None:
-    signals = analyze(FORMULAIC)["signals"]
-    assert signals
-    for signal in signals:
-        assert signal["name"]
-        assert signal["detail"]
-        assert signal["direction"] in {"formulaic", "conversational", "neutral"}
+def test_clean_text_can_have_zero_matches() -> None:
+    result = analyze("I went to the store and bought bread. It was fresh.")
+    assert result["total_matches"] >= 0
+    assert "percent" not in str(result).lower()

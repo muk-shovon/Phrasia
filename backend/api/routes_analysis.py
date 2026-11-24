@@ -9,9 +9,10 @@ from fastapi import APIRouter, Depends
 
 from backend.api.deps import require_owner
 from backend.api.errors import fail
-from backend.api.schemas import ReferenceRequest, TextRequest
+from backend.api.schemas import DiffRequest, ReferenceRequest, TextRequest
 from backend.db import repository
 from backend.core import detector, plagiarism
+from backend.core.rewrite_diff import diff_segments, style_report
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[Depends(require_owner)])
 
@@ -67,3 +68,19 @@ async def detect_style(payload: TextRequest) -> dict[str, Any]:
     result = detector.analyze(payload.text)
     _record("detector", payload.text, result)
     return result
+
+
+@router.post("/diff")
+async def diff_text(payload: DiffRequest) -> dict[str, Any]:
+    original = payload.original
+    rewritten = payload.rewritten
+    segments = diff_segments(original, rewritten)
+    style = style_report(original, rewritten)
+    changed = sum(1 for s in segments if s.get("type") == "changed")
+    review = sum(1 for s in segments if s.get("type") == "changed" and s.get("risk") in {"meaning", "number"})
+    return {
+        "segments": segments,
+        "changed": changed,
+        "review": review,
+        "style": style,
+    }

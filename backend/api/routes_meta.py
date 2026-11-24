@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from backend.api.deps import require_owner
-from backend.config import CHUNK_CHARS, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES
+from backend.config import CHUNK_CHARS, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES, MAX_WORDS_PER_REQUEST
 from backend.core import detector, plagiarism
 from backend.core.prompt import meta_payload
 from backend.providers import catalog
@@ -30,6 +30,7 @@ async def meta() -> dict[str, Any]:
             "max_input_chars": MAX_INPUT_CHARS,
             "chunk_chars": CHUNK_CHARS,
             "max_upload_bytes": MAX_UPLOAD_BYTES,
+            "max_words_per_request": MAX_WORDS_PER_REQUEST,
         },
         "providers": [
             {

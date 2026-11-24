@@ -22,6 +22,7 @@ export interface Limits {
   max_input_chars: number;
   chunk_chars: number;
   max_upload_bytes: number;
+  max_words_per_request: number;
 }
 
 export interface MetaResponse {
@@ -179,19 +180,26 @@ export interface PlagiarismReport {
   notes: string[];
 }
 
-export interface DetectorSignal {
+export interface DetectorPatternMatch {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface DetectorPatternGroup {
+  id: string;
   name: string;
-  detail: string;
-  direction: "formulaic" | "conversational" | "neutral";
+  hint: string;
+  weight: "strong" | "weak";
+  count: number;
+  matches: DetectorPatternMatch[];
 }
 
 export interface DetectorReport {
-  label: string;
-  summary: string;
-  word_count: number;
-  sentence_count: number;
-  signals: DetectorSignal[];
   disclaimer: string;
+  word_count: number;
+  total_matches: number;
+  patterns: DetectorPatternGroup[];
 }
 
 export interface Reference {
@@ -208,5 +216,32 @@ export interface HumanizePayload {
   intensity: string;
   preserve_formatting: boolean;
   keep_quotes: boolean;
+  clean_invisible: boolean;
   provider_id?: string | null;
+}
+
+
+export interface DiffSegment {
+  type: "equal" | "changed";
+  text?: string;
+  original: string;
+  rewritten: string;
+  risk: "none" | "meaning" | "number";
+}
+
+export interface DiffStylePattern { id: string; name: string; count: number; }
+export interface DiffStyleSide { total: number; strong: number; weak: number; by_pattern: DiffStylePattern[]; }
+export interface DiffStyle {
+  before: DiffStyleSide;
+  after: DiffStyleSide;
+  removed: number;
+  remaining: DiffStylePattern[];
+  changed_words_pct: number;
+}
+
+export interface DiffReport {
+  segments: DiffSegment[];
+  changed: number;
+  review: number;
+  style: DiffStyle;
 }
