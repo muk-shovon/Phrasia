@@ -1,10 +1,11 @@
 """Local similarity check against the owner's reference library.
 
-This is deliberately local: no text leaves the machine, and nothing is compared
-against the open internet. The UI must say so.
+Deliberately local: no text leaves the machine, nothing is compared against the
+open internet.
 """
 from __future__ import annotations
 
+import difflib
 import re
 from collections import Counter
 from typing import Any
@@ -46,6 +47,26 @@ def _clip(text: str, limit: int = 280) -> str:
     return clean if len(clean) <= limit else f"{clean[:limit].rstrip()}…"
 
 
+def _matched_passages(input_text: str, reference_text: str, limit: int = 3) -> list[dict[str, Any]]:
+    """Longest verbatim-ish passages the input shares with the reference."""
+    matches: list[dict[str, Any]] = []
+    ratio = difflib.SequenceMatcher(None, input_text.lower(), reference_text.lower())
+    for block in ratio.get_matching_blocks():
+        if block.size < 24 or block.size == 0:
+            continue
+        passage = _clip(input_text[block.a : block.a + block.size], 220)
+        if passage not in matches:
+            matches.append(
+                {
+                    "passage": passage,
+                    "length_chars": block.size,
+                }
+            )
+        if len(matches) >= limit:
+            break
+    return matches
+
+
 def _repeated_phrases(tokens: list[str], limit: int = 6) -> list[dict[str, Any]]:
     size = 8
     if len(tokens) < size * 2:
@@ -72,7 +93,10 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
     input_tokens = _tokens(text)
     input_shingles = _shingles(input_tokens)
     sentences = _sentences(text)
-    sentence_sets = [(sentence, _shingles(_tokens(sentence), SENTENCE_SHINGLE_SIZE)) for sentence in sentences]
+    sentence_sets = [
+        (sentence, _shingles(_tokens(sentence), SENTENCE_SHINGLE_SIZE))
+        for sentence in sentences
+    ]
 
     matches: list[dict[str, Any]] = []
     if input_shingles:
@@ -107,6 +131,9 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
                         "overlap_words": len(shared) * SHINGLE_SIZE,
                         "excerpt": _clip(str(reference.get("content", ""))),
                         "matched_sentences": hits,
+                        "matched_passages": _matched_passages(
+                            text, str(reference.get("content", ""))
+                        ),
                     }
                 )
 
@@ -116,9 +143,7 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
 
     notes: list[str] = []
     if not references:
-        notes.append(
-            "No reference documents yet. Add your own texts to compare against."
-        )
+        notes.append("No reference documents yet. Add your own texts to compare against.")
     if total_sentences == 0:
         notes.append("Add at least a few full sentences for a useful comparison.")
     if input_tokens and len(input_tokens) < 40:

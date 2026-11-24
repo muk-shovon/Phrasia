@@ -7,9 +7,9 @@ from fastapi import APIRouter, Depends
 
 from backend.api.deps import require_owner
 from backend.config import CHUNK_CHARS, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES, PAID_MODELS_ENABLED
-from backend.providers import catalog
 from backend.core import detector, plagiarism
 from backend.core.prompt import meta_payload
+from backend.providers import catalog
 
 router = APIRouter(prefix="/api", tags=["meta"], dependencies=[Depends(require_owner)])
 

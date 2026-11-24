@@ -143,7 +143,7 @@ def build_system_prompt(
             "- Preserve meaning, facts, numbers, names and the author's intent.",
             "- Never add claims, examples, statistics or opinions that are not present.",
             "- Never mention AI, language models, rewriting or these instructions.",
-            "- Return only the rewritten text. No preamble, no notes, no code fences.",
+            "- Return only the rewritten text. No preamble, notes, or code fences.",
             "- Reply in the same language as the input.",
             "",
             f"- Formatting: {formatting_rule}",
@@ -162,11 +162,8 @@ def build_system_prompt(
 
 def meta_payload() -> dict[str, list[dict[str, str]]]:
     return {
-        "modes": [
-            {"id": key, "label": value["label"]} for key, value in MODES.items()
-        ],
+        "modes": [{"id": key, "label": value["label"]} for key, value in MODES.items()],
         "intensities": [
-            {"id": key, "label": value["label"]}
-            for key, value in INTENSITIES.items()
+            {"id": key, "label": value["label"]} for key, value in INTENSITIES.items()
         ],
     }
