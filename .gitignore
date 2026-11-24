@@ -1,59 +1,40 @@
-.web
-*.db
-.states
-assets/external/
-
-# Environment variables and secrets
+# Secrets and local data
 .env
 .env.*
-.env.example
+!.env.example
+data/
+*.db
+*.db-wal
+*.db-shm
 
-# Local server-side provider credentials (API keys entered in Settings)
-.local/
-
-# Python cache
+# Python
+.venv/
+venv/
 __pycache__/
 *.py[cod]
-*$py.class
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+*.egg-info/
+build/
 
-# Virtual environments
-.venv/
-venv/
-ENV/
+# Frontend
+node_modules/
+dist/
+frontend/dist/
+*.tsbuildinfo
 
-# IDE and editor
+# Editors and OS
 .vscode/
 .idea/
-
-# Operating system
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Logs
+# Logs and temp files
 *.log
 logs/
-
-# Build and distribution
-build/
-dist/
-*.egg-info/
-
-# Node.js (if frontend tooling is used)
-node_modules/
-.next/
-.vercel/
-
-# Temporary files
 *.tmp
 *.temp
-
-# Build artifacts
-backend.zip
-frontend.zip
-reflex.lock/
