@@ -8,11 +8,11 @@ from backend.db import repository
 
 
 def test_usage_table_round_trip() -> None:
-    repository.record_usage("gemini", "gemini-2.5-flash", "humanize_chunk", 123, 456)
+    repository.record_usage("pollinations", "pollinations-2.5-flash", "humanize_chunk", 123, 456)
     rows = repository.list_usage(limit=10)
     assert rows
     row = rows[0]
-    assert row["provider_id"] == "gemini"
+    assert row["provider_id"] == "pollinations"
     assert row["operation"] == "humanize_chunk"
     assert row["input_chars"] == 123
     assert row["output_chars"] == 456

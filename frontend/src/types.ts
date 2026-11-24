@@ -37,18 +37,15 @@ export interface MetaResponse {
 export interface ProviderSetting {
   id: string;
   name: string;
-  tier: string;
-  notes: string;
-  env_key: string;
+  anonymous: boolean;
   requires_key: boolean;
-  requires_base_url: boolean;
   configured: boolean;
-  source: "saved" | "env" | "none";
+  source: "saved" | "none";
   masked_key: string;
   model: string;
   base_url: string;
-  enabled: number | null;
-  models: ModelOption[];
+  enabled: number;
+  rate_limit_requests_per_minute: number;
 }
 
 export interface SettingsResponse {
@@ -165,11 +162,21 @@ export interface PlagiarismMatch {
   overlap_words: number;
   excerpt: string;
   matched_sentences: { sentence: string; overlap_percent: number }[];
+  matched_passages: { passage: string; length_chars: number }[];
+}
+
+export interface WebCheckResult {
+  available: boolean;
+  results: { title: string; url: string; snippet: string }[];
+  provider: string | null;
+  disclaimer?: string;
+  error: string | null;
 }
 
 export interface PlagiarismReport {
   local_only: boolean;
   disclaimer: string;
+  web: WebCheckResult;
   word_count: number;
   sentence_count: number;
   checked_references: number;

@@ -1,116 +1,93 @@
-import { api } from "../api";
-import type { DetectorReport, DetectorSignal } from "../types";
+import { api, errorMessage } from "../api";
+import type { DetectorReport } from "../types";
 import {
-  CARD,
-  INPUT,
+  badge,
   button,
+  card,
   el,
-  formatNumber,
-  notice,
-  pageHeader,
-  reportError,
-  setBusy,
-  takeDraft,
+  pageHead,
+  spinner,
   toast,
+  takeDraft,
 } from "../ui";
 
-const DIRECTION_STYLES: Record<DetectorSignal["direction"], string> = {
-  formulaic: "border-[#EBD9B5] bg-[#FDF7EA] text-[#7A5410]",
-  conversational: "border-[#CFE3D6] bg-[#F1F8F3] text-[#1B5E3B]",
-  neutral: "border-[#E3E7DD] bg-[#FAFBF7] text-[#5C6B60]",
-};
-
 export async function renderDetector(root: HTMLElement): Promise<void> {
-  root.append(
-    pageHeader(
-      "Local style signal",
-      "Read the surface patterns in a passage: stock transitions, inflated vocabulary, contractions, rhythm and repetition.",
+  root.replaceChildren(
+    pageHead(
+      "Style Signal",
+      "A local reading of your text: named signals and a plain-language label. No verdict, no percentage.",
+    ),
+    card("mt-2"),
+  );
+
+  const cardEl = root.lastElementChild as HTMLElement;
+  cardEl.append(
+    el(
+      "div",
+      "mt-1 text-sm font-medium text-[#7A877C]",
+      "Pick a passage (or a document) — it is analysed here on your device.",
     ),
   );
 
-  root.append(
-    notice(
-      "This is a style signal, not proof of authorship. It cannot tell you who wrote a text, and it has no percentage verdict. Use it as an editing prompt, not a detector.",
-    ),
+  const textArea = el(
+    "textarea",
+    "w-full resize-y rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-3 text-base leading-6 text-[#1D3026] outline-none transition placeholder:text-[#8C9890] focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15",
   );
-  root.append(el("div", "h-5"));
-
-  const card = el("section", CARD);
-  const textArea = el("textarea", `${INPUT} min-h-[240px] resize-y leading-6`);
-  textArea.placeholder = "Paste a passage to inspect its writing patterns.";
   textArea.value = takeDraft();
+  textArea.placeholder = "Paste a passage (200-3,000 words work best).";
+  cardEl.append(el("div", "mt-4"), textArea);
 
-  const analyze = button("Read style signals", "primary", () => void run());
-  const resultHost = el("div", "mt-5");
+  const analyzeBtn = button("Read style signals", "primary", () => void run());
+  cardEl.append(el("div", "mt-6 flex items-center gap-3"), analyzeBtn, spinner(28));
 
-  card.append(
-    el("h2", "text-sm font-semibold uppercase tracking-wider text-[#5C6B60]", "Text to inspect"),
-    el("div", "mt-3"),
-    textArea,
-    el("div", "mt-3 flex flex-wrap items-center gap-3"),
-    analyze,
-    el("span", "text-xs text-[#7A877C]", "Runs locally. Nothing is sent to a provider."),
-    resultHost,
-  );
-  root.append(card);
+  const resultHost = el("div", "mt-6");
+  cardEl.append(resultHost);
+
+  function renderReport(report: DetectorReport): void {
+    resultHost.replaceChildren(
+      el("div", "flex flex-wrap items-center gap-4 rounded-xl bg-[#ECF5ED] px-5 py-4 text-sm"),
+    );
+    const header = resultHost.firstElementChild as HTMLElement;
+    header.append(
+      el("span", "font-bold text-[#16251C]", "Label: "),
+      badge(report.label, "accent"),
+      el("span", "text-[#5C6C62]", ` — ${report.word_count} words`),
+    );
+
+    const box = el("div", "mt-5 space-y-3");
+    for (const signal of report.signals) {
+      const cardEl = el(
+        "div",
+        "rounded-lg border border-[#DDE2D6] bg-white px-4 py-3",
+      );
+      cardEl.append(
+        el("p", "text-xs font-semibold uppercase tracking-wide text-[#8C9890]", signal.name),
+        el("p", "mt-1 text-sm text-[#3D4B41]", signal.detail),
+      );
+      box.append(cardEl);
+    }
+    resultHost.append(box);
+    resultHost.append(
+      el("p", "mt-4 text-sm text-[#7C8A80]", report.summary),
+      el("p", "mt-4 text-sm text-[#7C8A80]", report.disclaimer),
+    );
+  }
 
   async function run(): Promise<void> {
     const text = textArea.value.trim();
     if (!text) {
-      toast("Paste some text first.", "error");
+      toast("Paste some text to analyze.", "error");
       return;
     }
-    setBusy(analyze, true, "Reading…");
+    analyzeBtn.disabled = true;
+    resultHost.replaceChildren(el("p", "", "Analysing locally…"));
     try {
-      renderReport(await api.detect(text));
+      const report = await api.detect(text);
+      renderReport(report);
     } catch (error) {
-      reportError(error);
+      resultHost.replaceChildren(el("p", "text-sm text-[#8B2020]", errorMessage(error)));
     } finally {
-      setBusy(analyze, false);
+      analyzeBtn.disabled = false;
     }
-  }
-
-  function renderReport(report: DetectorReport): void {
-    resultHost.replaceChildren();
-
-    const summary = el("div", "rounded-xl border border-[#DDE3D8] bg-[#FAFBF7] p-4");
-    summary.append(
-      el(
-        "p",
-        "text-xs font-semibold uppercase tracking-wider text-[#8B978D]",
-        "Style signal",
-      ),
-      el(
-        "p",
-        "mt-1 text-2xl font-semibold capitalize tracking-tight text-[#17251C]",
-        report.label,
-      ),
-      el("p", "mt-2 text-sm leading-6 text-[#3D4B41]", report.summary),
-      el(
-        "p",
-        "mt-2 text-xs text-[#8B978D]",
-        `${formatNumber(report.word_count)} words · ${formatNumber(report.sentence_count)} sentences`,
-      ),
-    );
-    resultHost.append(summary);
-
-    const grid = el("div", "mt-3 grid gap-2 sm:grid-cols-2");
-    for (const signal of report.signals) {
-      const box = el("div", `rounded-lg border px-3 py-2.5 ${DIRECTION_STYLES[signal.direction]}`);
-      box.append(
-        el("p", "text-xs font-semibold uppercase tracking-wide opacity-80", signal.name),
-        el("p", "mt-1 text-sm leading-5", signal.detail),
-      );
-      grid.append(box);
-    }
-    resultHost.append(grid);
-
-    resultHost.append(
-      el(
-        "p",
-        "mt-4 rounded-lg border border-[#E7EBE3] bg-white px-3.5 py-2.5 text-xs leading-5 text-[#7A877C]",
-        report.disclaimer,
-      ),
-    );
   }
 }

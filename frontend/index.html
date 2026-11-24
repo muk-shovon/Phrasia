@@ -3,18 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="Phrasia — a private writing workspace for humanizing, checking similarity and reading style signals."
-    />
     <title>Phrasia</title>
   </head>
-  <body class="min-h-screen bg-[#F4F5F0] text-[#17251C] antialiased">
-    <div class="min-h-screen md:flex">
-      <aside id="sidebar" class="bg-[#132019] text-[#E7EDE6] md:min-h-screen md:w-64 md:shrink-0"></aside>
-      <main id="view" class="min-w-0 flex-1 p-4 md:p-8"></main>
+  <body class="min-h-screen bg-[#F5F7F3] text-[#16251C] antialiased">
+    <div class="md:flex md:min-h-screen">
+      <aside
+        id="sidebar"
+        class="hidden md:flex md:w-64 md:shrink-0 md:flex-col bg-[#14211A] text-[#DDE4D8] md:min-h-screen"
+      ></aside>
+      <main
+        id="view"
+        class="min-w-0 flex-1 px-5 py-8 md:px-10 md:py-10"
+        aria-label="Content area"
+      ></main>
     </div>
-    <div id="toast-root" class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-80 flex-col gap-2"></div>
+    <nav
+      id="mobile-tabs"
+      class="hidden fixed inset-x-0 bottom-0 z-40 border-t border-[#DFE4DB] bg-white px-2 py-2 shadow-[0_-2px_10px_rgba(20,32,22,0.06)] md:hidden"
+      aria-label="Bottom navigation"
+    ></nav>
+    <div id="toast-root" class="pointer-events-none fixed right-3 top-4 z-50 flex w-80 flex-col gap-2 md:bottom-4 md:left-auto md:top-auto md:w-80"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

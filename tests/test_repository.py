@@ -81,13 +81,13 @@ def test_interrupted_jobs_become_paused() -> None:
 
 def test_provider_settings_round_trip() -> None:
     repository.upsert_provider_setting(
-        "pollinations", api_key="secret-value-1234", model="gemini-2.5-flash"
+        "pollinations", api_key="secret-value-1234", model="pollinations-2.5-flash"
     )
     saved = repository.provider_setting("pollinations")
     assert saved is not None
     assert saved["api_key"] == "secret-value-1234"
 
-    repository.upsert_provider_setting("gemini", model="gemini-2.0-flash")
+    repository.upsert_provider_setting("pollinations", model="pollinations-2.0-flash")
     assert repository.provider_setting("pollinations")["api_key"] == "secret-value-1234"
 
     repository.delete_provider_key("pollinations")
