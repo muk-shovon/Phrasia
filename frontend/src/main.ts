@@ -69,10 +69,8 @@ function buildSidebar(activeHash: string): void {
   const collapsed = isCollapsed();
   sidebar.classList.toggle("collapsed", collapsed);
 
-  // Brand + collapse toggle
+  // Brand + collapse toggle (toggle replaces P mark)
   const brand = el("div", "sidebar-brand");
-  const mark = el("div", "sidebar-brand-mark", "P");
-  mark.setAttribute("aria-hidden", "true");
   const brandText = el("div", "sidebar-brand-text");
   brandText.append(el("div", "sidebar-brand-name", "Phrasia"), el("div", "sidebar-brand-tag", "Words, Refined."));
 
@@ -88,8 +86,8 @@ function buildSidebar(activeHash: string): void {
   });
 
   const brandLeft = el("div", "flex items-center gap-3 min-w-0");
-  brandLeft.append(mark, brandText);
-  brand.append(brandLeft, toggle);
+  brandLeft.append(toggle, brandText);
+  brand.append(brandLeft);
   sidebar.append(brand);
 
   // Nav
