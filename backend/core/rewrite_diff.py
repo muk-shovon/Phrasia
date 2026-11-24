@@ -5,7 +5,6 @@ import difflib
 import re
 from typing import Any
 
-from backend.core.ai_patterns import find_matches, get_banned_words
 
 _WORD_RE = re.compile(r"\S+")
 _NUM_RE = re.compile(r"\d+(?:[\.,]\d+)?")
@@ -101,6 +100,16 @@ def _meaning_flags_from_source(source: str, rewritten: str) -> bool:
                 continue
             return True
     return False
+
+
+def meaning_flags(source: str, rewritten: str) -> list[str]:
+    """Meaning-risk flags against the source sentence only."""
+    flags: list[str] = []
+    if _has_number_change(source, rewritten):
+        flags.append("number")
+    if _meaning_flags_from_source(source, rewritten):
+        flags.append("meaning")
+    return flags
 
 
 def _risk(a: str, b: str, source_sentence: str | None = None) -> str:
@@ -207,78 +216,3 @@ def diff_from_alignment(alignment: list[dict[str, Any]]) -> list[dict[str, Any]]
     if segs and segs[-1].get("sentence_space"):
         segs.pop()
     return segs
-
-
-def _style_counts(text: str) -> dict[str, Any]:
-    groups = find_matches(text)
-    by_pattern = [{"id": g["id"], "name": g["name"], "count": g["count"]} for g in groups]
-    strong = sum(g["count"] for g in groups if g.get("weight") == "strong")
-    weak = sum(g["count"] for g in groups if g.get("weight") == "weak")
-    return {"total": strong + weak, "strong": strong, "weak": weak, "by_pattern": by_pattern}
-
-
-def structure_stats(alignment: list[dict[str, Any]] | None) -> dict[str, Any]:
-    if not alignment:
-        return {"sentences_total": 0, "sentences_restructured": 0, "average_change_pct": 0}
-    total = 0
-    restructured = 0
-    for p in alignment:
-        n = max(1, len(p.get("source_indices") or []))
-        total += n
-        if not p.get("low_change", False):
-            restructured += n
-    avg = round(100 * sum((1 - float(p.get("similarity", 1.0))) * max(1, len(p.get("source_indices") or [])) for p in alignment) / max(total, 1))
-    return {"sentences_total": total, "sentences_restructured": restructured, "average_change_pct": avg}
-
-
-def style_report(original: str, rewritten: str, alignment: list[dict[str, Any]] | None = None) -> dict[str, Any]:
-    before = _style_counts(original)
-    after = _style_counts(rewritten)
-    remaining = [{"id": p["id"], "name": p["name"], "count": p["count"]} for p in after["by_pattern"]]
-    a = _tokens(original)
-    b = _tokens(rewritten)
-    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
-    changed = 0
-    for tag, i1, i2, j1, j2 in sm.get_opcodes():
-        if tag == "equal":
-            continue
-        changed += max(i2 - i1, j2 - j1)
-    denom = max(len(a), 1)
-    changed_words_pct = round(100 * changed / denom)
-    # banned words removed (simple count in original vs rewritten)
-    import re as _re
-    bw = get_banned_words()
-    def _bw_count(txt: str) -> int:
-        low = txt.lower(); n = 0
-        for w in bw:
-            if w == "not only ... but also":
-                n += len(_re.findall(r"\bnot\s+only\b.{0,80}\bbut\s+also\b", low))
-            else:
-                n += len(_re.findall(r"(?<!\w)" + _re.escape(w.lower()) + r"(?!\w)", low))
-        return n
-    banned_removed = max(0, _bw_count(original) - _bw_count(rewritten))
-
-    # rhythm varied: paragraphs not all-flat
-    paras = [p for p in _re.split(r"\n\s*\n", rewritten.strip()) if p.strip()]
-    rhythm_varied = 0
-    for para in paras:
-        sents = [x.strip() for x in _re.split(r"(?<=[.!?])\s+", para) if x.strip()]
-        lens = [len(_WORD_RE.findall(x)) for x in sents]
-        if len(lens) < 3:
-            rhythm_varied += 1
-            continue
-        if max(lens) <= min(lens) * 1.25 and (max(lens) - min(lens)) <= max(2, min(lens)*0.2):
-            pass  # flat
-        else:
-            rhythm_varied += 1
-    return {
-        "before": before,
-        "after": after,
-        "removed": max(0, before["total"] - after["total"]),
-        "remaining": remaining,
-        "changed_words_pct": changed_words_pct,
-        "banned_words_removed": banned_removed,
-        "rhythm_varied": rhythm_varied,
-        "paragraphs_total": len(paras),
-        "structure": structure_stats(alignment),
-    }

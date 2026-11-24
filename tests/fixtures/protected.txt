@@ -1,0 +1,1 @@
+Read https://example.com/guide for the full steps. Email ada@example.com with questions. The citation [1, 3] points to the source. Use `x = 1` in the code block. The meeting lasted 3 hours and cost $50. She said "the draft is ready" after lunch.

@@ -62,7 +62,6 @@ export const ICONS = {
   plagiarism: ico('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/><path d="M8 11h6"/>'),
   detector: ico('<path d="M12 3v18"/><path d="M3 12h18"/><circle cx="12" cy="12" r="7"/>'),
   history: ico('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>'),
-  settings: ico('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.1a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 0 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.1a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 0 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2h.1a1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.1a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1v.1a1 1 0 0 0 .9.6H20a2 2 0 0 1 0 4h-.1a1 1 0 0 0-.9.6z"/>'),
   menu: ico('<line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/>'),
   close: ico('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
   collapse: ico('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/><path d="m15 10-2 2 2 2"/>'),
@@ -202,15 +201,6 @@ export function card(className = ""): HTMLElement {
 
 export function badge(label: string, variant: "neutral" | "accent" | "success" | "warn" | "danger" = "neutral"): HTMLElement {
   return el("span", `badge badge-${variant}`, label);
-}
-
-export function statusBadge(status: string): HTMLElement {
-  const s = status.toLowerCase();
-  if (s === "completed" || s === "done" || s === "success") return badge("Completed", "success");
-  if (s === "failed" || s === "error") return badge("Failed", "danger");
-  if (s === "running" || s === "processing" || s === "queued" || s === "paused") return badge(status.charAt(0).toUpperCase() + status.slice(1), "accent");
-  if (s === "cancelled" || s === "canceled") return badge("Cancelled", "warn");
-  return badge(status, "neutral");
 }
 
 export function emptyState(title: string, detail: string, icon = "◌"): HTMLElement {

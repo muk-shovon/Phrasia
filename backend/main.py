@@ -22,15 +22,11 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
-logger = logging.getLogger("phrasia")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     repository.init_db()
-    paused = repository.mark_interrupted_jobs_paused()
-    if paused:
-        logger.info("marked %s interrupted job(s) as paused for resume", paused)
     yield
 
 

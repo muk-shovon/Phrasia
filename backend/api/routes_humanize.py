@@ -1,144 +1,99 @@
-"""Humanize endpoint plus job inspection, retry, cancel and export."""
+"""Synchronous local rewriting plus text and DOCX export."""
 from __future__ import annotations
 
-import json
+import re
 from typing import Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, Response
+from fastapi import APIRouter, Depends, Response
+from fastapi.responses import JSONResponse
 
 from backend.api.deps import require_owner
 from backend.api.errors import fail
-from backend.api.schemas import HumanizeRequest
-from backend.db import repository
+from backend.api.schemas import ExportRequest, HumanizeRequest
 from backend.core import humanizer
 from backend.core.documents import export_docx, safe_filename
-from backend.core.prompt import HumanizeOptions
+from backend.core.rewrite_diff import diff_from_alignment
+from backend.db import repository
+from backend.engine import ranker
 
 router = APIRouter(prefix="/api", tags=["humanize"], dependencies=[Depends(require_owner)])
+_WORD = re.compile(r"\S+")
 
 
-def job_payload(detail: dict[str, Any]) -> dict[str, Any]:
-    total = int(detail.get("total_chunks") or 0)
-    completed = int(detail.get("completed_chunks") or 0)
-    payload = {
-        "id": int(detail["id"]),
-        "document_id": int(detail["document_id"]),
-        "title": str(detail.get("title") or "Untitled document"),
-        "status": str(detail["status"]),
-        "mode": str(detail["mode"]),
-        "intensity": str(detail["intensity"]),
-        "provider_id": detail.get("provider_id"),
-        "model_id": detail.get("model_id"),
-        "error": detail.get("error"),
-        "total_chunks": total,
-        "completed_chunks": completed,
-        "progress_percent": round(100 * completed / total) if total else 0,
-        "created_at": detail.get("created_at"),
-        "updated_at": detail.get("updated_at"),
-        "input_text": detail.get("input_text") or "",
-        "output_text": detail.get("output_text"),
-        "options": json.loads(str(detail.get("options_json") or "{}")),
-        "chunks": detail.get("chunks") or [],
-    }
-    return payload
+def _words_changed_pct(original: str, rewritten: str) -> int:
+    source = _WORD.findall(original)
+    result = _WORD.findall(rewritten)
+    changed = abs(len(source) - len(result)) + sum(
+        1 for left, right in zip(source, result) if left.lower() != right.lower()
+    )
+    return round(100 * changed / max(len(source), 1))
 
 
-@router.post("/humanize", status_code=202)
-async def create_humanization(
-    payload: HumanizeRequest, background: BackgroundTasks
-) -> dict[str, Any]:
+def _title(text: str) -> str:
+    words = text.strip().split()[:8]
+    return " ".join(words) or "Untitled document"
+
+
+@router.post("/humanize")
+async def create_humanization(payload: HumanizeRequest) -> JSONResponse:
     try:
-        job_id = humanizer.create_job(
+        result = humanizer.humanize(
             payload.text,
-            title=payload.title,
-            mode=payload.mode,
-            intensity=payload.intensity,
-            options=HumanizeOptions(
-                preserve_formatting=payload.preserve_formatting,
-                keep_quotes=payload.keep_quotes,
-                deep_humanize=payload.deep_humanize,
-                remove_em_dashes=payload.remove_em_dashes,
-                clean_invisible=payload.clean_invisible,
-            ),
-            provider_id=payload.provider_id,
+            tone=payload.tone,
+            strength=payload.strength,
+            variation=payload.variation,
+            clean_invisible=payload.clean_invisible,
         )
     except ValueError as exc:
         raise fail(422, str(exc), "invalid_input") from exc
 
-    background.add_task(humanizer.run_job, job_id)
-    return {"job_id": job_id}
+    alignment = result["alignment"]
+    segments = diff_from_alignment(alignment)
+    changed = sum(1 for segment in segments if segment.get("type") == "changed")
+    review = sum(
+        1
+        for segment in segments
+        if segment.get("type") == "changed" and segment.get("risk") in {"meaning", "number"}
+    )
+    before = ranker.pattern_count(payload.text)
+    after = ranker.pattern_count(result["text"])
+
+    document_id = repository.create_document(_title(payload.text)[:200])
+    repository.add_version(document_id, "source", payload.text)
+    repository.add_version(document_id, "humanized", result["text"])
+
+    body: dict[str, Any] = {
+        "rewritten": result["text"],
+        "sentences": result["sentences"],
+        "diff": {"segments": segments, "changed": changed, "review": review},
+        "style_check": {
+            "patterns_before": before,
+            "patterns_after": after,
+            "patterns_removed": max(0, before - after),
+            "sentences_restructured": result["summary"]["sentences_restructured"],
+            "sentences_total": result["summary"]["sentences_total"],
+            "words_changed_pct": _words_changed_pct(payload.text, result["text"]),
+        },
+        "document_id": document_id,
+    }
+    return JSONResponse(body, media_type="application/json; charset=utf-8")
 
 
-@router.get("/jobs")
-async def jobs(limit: int = 50) -> dict[str, Any]:
-    limit = max(1, min(limit, 200))
-    return {"jobs": repository.list_jobs(limit)}
-
-
-@router.get("/jobs/{job_id}")
-async def job(job_id: int) -> dict[str, Any]:
-    detail = repository.get_job_detail(job_id)
-    if detail is None:
-        raise fail(404, "That job does not exist.", "not_found")
-    return job_payload(detail)
-
-
-@router.post("/jobs/{job_id}/retry")
-async def retry_job(job_id: int, background: BackgroundTasks) -> dict[str, Any]:
-    if repository.get_job(job_id) is None:
-        raise fail(404, "That job does not exist.", "not_found")
-    if not humanizer.ensure_resumable(job_id):
-        raise fail(409, "This job is already complete.", "not_resumable")
-    background.add_task(humanizer.run_job, job_id)
-    return {"job_id": job_id, "status": "queued"}
-
-
-@router.post("/jobs/{job_id}/cancel")
-async def cancel_job(job_id: int) -> dict[str, Any]:
-    current = repository.get_job(job_id)
-    if current is None:
-        raise fail(404, "That job does not exist.", "not_found")
-    if current["status"] == "completed":
-        raise fail(409, "This job is already complete.", "not_cancellable")
-    repository.update_job(job_id, status="cancelled")
-    return {"job_id": job_id, "status": "cancelled"}
-
-
-@router.delete("/jobs/{job_id}")
-async def delete_job(job_id: int) -> dict[str, Any]:
-    if not repository.delete_job(job_id):
-        raise fail(404, "That job does not exist.", "not_found")
-    return {"deleted": True, "job_id": job_id}
-
-
-@router.get("/jobs/{job_id}/export")
-async def export_job(
-    job_id: int, fmt: str = Query(default="txt", alias="format")
-) -> Response:
-    detail = repository.get_job_detail(job_id)
-    if detail is None:
-        raise fail(404, "That job does not exist.", "not_found")
-    text = detail.get("output_text")
-    if not text:
-        raise fail(409, "This job has no finished output to export.", "not_ready")
-
-    title = str(detail.get("title") or "phrasia")
-    kind = (fmt or "txt").lower()
-    if kind == "txt":
-        body = str(text).encode("utf-8")
-        media = "text/plain; charset=utf-8"
-        filename = safe_filename(title, "txt")
-    elif kind == "docx":
-        body = export_docx(str(text))
-        media = (
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-        filename = safe_filename(title, "docx")
-    else:
-        raise fail(422, "Supported export formats are txt and docx.", "bad_format")
-
+@router.post("/export")
+async def export_text(payload: ExportRequest) -> Response:
+    title = (payload.title or "").strip() or "phrasia"
     return Response(
-        content=body,
-        media_type=media,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        content=payload.text.encode("utf-8"),
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename(title, "txt")}"'},
+    )
+
+
+@router.post("/export/docx")
+async def export_document(payload: ExportRequest) -> Response:
+    title = (payload.title or "").strip() or "phrasia"
+    return Response(
+        content=export_docx(payload.text),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{safe_filename(title, "docx")}"'},
     )

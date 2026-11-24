@@ -1,146 +1,61 @@
-"""Humanizer orchestration with fake providers (no network)."""
+"""Pure-Python rewriting: structure, safety and the word cap."""
 from __future__ import annotations
 
-import asyncio
-from typing import Any
+import pytest
 
-from backend.db import repository
-from backend.providers import catalog
-from backend.providers.base import GenerationResult, ProviderFailure
-from backend.providers.registry import ConfiguredProvider
+from backend.config import MAX_WORDS_PER_REQUEST
 from backend.core import humanizer
 
-
-class FakeProvider:
-    def __init__(
-        self,
-        text: str = "Rewritten text.",
-        provider_id: str = "pollinations",
-        *,
-        finish: str = "stop",
-        error: ProviderFailure | None = None,
-    ) -> None:
-        self.text = text
-        self.finish = finish
-        self.error = error
-        self.calls: list[Any] = []
-        self.provider_id = provider_id
-        self.model = "gpt-oss-20b"
-
-    async def generate(self, request: Any) -> GenerationResult:
-        self.calls.append(request)
-        if self.error is not None:
-            raise self.error
-        text = self.text
-        # auto-tag plain responses for sentence-aligned pipeline
-        if "[S1]" in request.text and "[S" not in text:
-            import re as _re
-            src_tags = _re.findall(r"\[(S\d+(?:\+S\d+)*)\]", request.text)
-            # split output into same number of sentences if possible, else put all in last? better distribute
-            parts = [p.strip() for p in _re.split(r'(?<=[.!?])\s+', text.strip()) if p.strip()]
-            if len(parts) == len(src_tags):
-                text = "\n".join(f"[{t}] {p}" for t, p in zip(src_tags, parts))
-            elif len(parts) == 1 and len(src_tags) > 1:
-                merged = "+".join(src_tags)
-                text = f"[{merged}] {parts[0]}"
-            else:
-                if not parts:
-                    parts = [text.strip() or "..."]
-                while len(parts) < len(src_tags):
-                    parts.append(parts[-1])
-                parts = parts[:len(src_tags)]
-                text = "\n".join(f"[{t}] {p}" for t, p in zip(src_tags, parts))
-        return GenerationResult(
-            text=text, provider_id=self.provider_id, model_id=self.model, finish_reason=self.finish
-        )
-
-    async def health(self) -> tuple[bool, str]:
-        return True, "fake"
+FIXTURE = (
+    "Remote work has become a widespread part of how many organizations operate today, so working remotely isn't always easy. "
+    "Through digital tools, employees can communicate, share information, and work together even when they're in diverse locations. "
+    "Some employees may feel disconnected from their teams, while others struggle to balance work responsibilities with personal life."
+)
 
 
-def _configured(provider_id: str, provider: FakeProvider) -> ConfiguredProvider:
-    spec = catalog.get_spec(provider_id)
-    assert spec is not None
-    return ConfiguredProvider(
-        spec=spec,
-        provider=provider,  # type: ignore[arg-type]
-        source="saved",
-        masked_key="••••1234",
-        model=provider.model,
-        base_url=spec.base_url,
-    )
+def test_word_cap_enforced() -> None:
+    with pytest.raises(ValueError, match="limit"):
+        humanizer.humanize(" ".join(["word"] * (MAX_WORDS_PER_REQUEST + 1)))
 
 
-def _make_job(text: str = "Original sentence one. Original sentence two.") -> int:
-    return humanizer.create_job(text, mode="balanced", intensity="medium")
+def test_fixture_restructures_sentences() -> None:
+    result = humanizer.humanize(FIXTURE, strength="heavy")
+    assert result["summary"]["sentences_total"] == 3
+    assert result["summary"]["sentences_restructured"] >= 1
+    assert "Through digital tools" not in result["text"] or "through digital tools" in result["text"]
+    assert "may" in result["text"]
+    assert "isn't" in result["text"] or "is not" in result["text"]
 
 
-def test_job_completes_and_assembles_output() -> None:
-    job_id = _make_job()
-    fake = FakeProvider("A calmer rewrite.")
-    asyncio.run(humanizer.run_job(job_id, [_configured("pollinations", fake)]))
-
-    job = repository.get_job(job_id)
-    assert job is not None
-    assert job["status"] == "completed"
-    assert job["completed_chunks"] == job["total_chunks"]
-    detail = repository.get_job_detail(job_id)
-    assert detail is not None
-    assert detail["output_text"] == "A calmer rewrite."
-    assert fake.calls and fake.calls[0].system
+def test_unsafe_sentence_is_kept_unchanged() -> None:
+    source = "https://example.com/notes contains 42 samples."
+    result = humanizer.humanize(source)
+    assert result["text"] == source
+    assert result["summary"]["unchanged_sentences"] == 1
+    assert result["alignment"][0]["low_change"] is True
 
 
-def test_truncated_output_is_retried_then_fails() -> None:
-    job_id = _make_job()
-    fake = FakeProvider("cut off", finish="length")
-    asyncio.run(humanizer.run_job(job_id, [_configured("pollinations", fake)]))
-
-    job = repository.get_job(job_id)
-    assert job is not None
-    assert job["status"] == "failed"
-    assert "cut off" in str(job["error"]).lower()
-    assert len(fake.calls) >= 3  # bounded retries with more tokens
-
-    chunks = repository.list_chunks(job_id)
-    assert chunks[0]["status"] == "error"
-    assert chunks[0]["attempt_count"] >= 3
+def test_banned_word_in_source_is_replaced() -> None:
+    result = humanizer.humanize("Ultimately, this is crucial for teams.")
+    assert "ultimately" not in result["text"].lower()
+    assert "crucial" not in result["text"].lower()
+    assert "important" in result["text"].lower()
 
 
-def test_fallback_uses_the_next_provider() -> None:
-    job_id = _make_job()
-    broken = FakeProvider(error=ProviderFailure("bad key", code="invalid_key"))
-    working = FakeProvider("Second provider output.")
-    asyncio.run(
-        humanizer.run_job(
-            job_id,
-            [
-                _configured("pollinations", broken),
-                _configured("ovh", working),
-            ],
-        )
-    )
-
-    job = repository.get_job(job_id)
-    assert job is not None
-    assert job["status"] == "completed"
-    assert job["provider_id"] == "ovh"
-    assert working.calls
+def test_banned_word_inside_quote_is_kept() -> None:
+    source = 'She said "this is crucial" during the meeting.'
+    result = humanizer.humanize(source)
+    assert '"this is crucial"' in result["text"]
 
 
-def test_resume_skips_completed_chunks() -> None:
-    job_id = _make_job("one two three")
-    first = FakeProvider("First pass.")
-    asyncio.run(humanizer.run_job(job_id, [_configured("pollinations", first)]))
-    assert repository.get_job(job_id)["status"] == "completed"
-
-    # Retrying a completed job is rejected.
-    assert humanizer.ensure_resumable(job_id) is False
+def test_numbers_and_names_are_preserved() -> None:
+    result = humanizer.humanize("Dr. Smith met Ada in 2024, so the plan changed, because funding fell.")
+    assert "2024" in result["text"]
+    assert "Smith" in result["text"]
+    assert "Ada" in result["text"]
 
 
-def test_no_provider_fails_cleanly() -> None:
-    job_id = _make_job()
-    asyncio.run(humanizer.run_job(job_id, []))
-    job = repository.get_job(job_id)
-    assert job is not None
-    assert job["status"] == "failed"
-    assert "provider" in str(job["error"]).lower()
+def test_clean_invisible_characters_toggle() -> None:
+    source = "Hello\u200b world."
+    assert "world" in humanizer.humanize(source, clean_invisible=True)["text"]
+    assert "\u200b" in humanizer.humanize(source, clean_invisible=False)["text"]

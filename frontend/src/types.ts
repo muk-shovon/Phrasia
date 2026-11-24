@@ -1,112 +1,3 @@
-export interface Option {
-  id: string;
-  label: string;
-}
-
-export interface ModelOption {
-  id: string;
-  label: string;
-  paid: boolean;
-  enabled: boolean;
-}
-
-export interface ProviderInfo {
-  id: string;
-  name: string;
-  tier: string;
-  notes: string;
-  models: ModelOption[];
-}
-
-export interface Limits {
-  max_input_chars: number;
-  chunk_chars: number;
-  max_upload_bytes: number;
-  max_words_per_request: number;
-}
-
-export interface MetaResponse {
-  version: string;
-  modes: Option[];
-  intensities: Option[];
-  paid_models_enabled: boolean;
-  limits: Limits;
-  providers: ProviderInfo[];
-  disclaimers: { detector: string; plagiarism: string };
-}
-
-export interface ProviderSetting {
-  id: string;
-  name: string;
-  anonymous: boolean;
-  requires_key: boolean;
-  configured: boolean;
-  source: "saved" | "none";
-  masked_key: string;
-  model: string;
-  base_url: string;
-  enabled: number;
-  rate_limit_requests_per_minute: number;
-}
-
-export interface SettingsResponse {
-  providers: ProviderSetting[];
-  preferred_provider: string | null;
-  paid_models_enabled: boolean;
-  database_path: string;
-  limits: Limits;
-}
-
-export interface JobChunk {
-  id: number;
-  seq: number;
-  status: string;
-  attempt_count: number;
-  error: string | null;
-  source_length: number;
-  output_length: number | null;
-  mapping_json?: string | null;
-}
-
-export interface JobDetail {
-  id: number;
-  document_id: number;
-  title: string;
-  status: string;
-  mode: string;
-  intensity: string;
-  provider_id: string | null;
-  model_id: string | null;
-  error: string | null;
-  total_chunks: number;
-  completed_chunks: number;
-  progress_percent: number;
-  created_at: string;
-  updated_at: string;
-  input_text: string;
-  output_text: string | null;
-  options: { preserve_formatting?: boolean; keep_quotes?: boolean };
-  chunks: JobChunk[];
-}
-
-export interface JobSummary {
-  id: number;
-  status: string;
-  mode: string;
-  intensity: string;
-  total_chunks: number;
-  completed_chunks: number;
-  provider_id: string | null;
-  model_id: string | null;
-  error: string | null;
-  created_at: string;
-  updated_at: string;
-  document_id: number;
-  title: string;
-  input_excerpt: string;
-  output_excerpt: string | null;
-}
-
 export interface DocumentSummary {
   id: number;
   title: string;
@@ -114,8 +5,6 @@ export interface DocumentSummary {
   created_at: string;
   updated_at: string;
   version_count: number;
-  latest_job_id: number | null;
-  latest_job_status: string | null;
   latest_excerpt: string | null;
 }
 
@@ -129,24 +18,10 @@ export interface DocumentDetail {
   versions: {
     id: number;
     version_type: string;
+    content: string;
     word_count: number;
     char_count: number;
-    provider_id: string | null;
-    model_id: string | null;
     created_at: string;
-  }[];
-  jobs: {
-    id: number;
-    status: string;
-    mode: string;
-    intensity: string;
-    total_chunks: number;
-    completed_chunks: number;
-    provider_id: string | null;
-    model_id: string | null;
-    error: string | null;
-    created_at: string;
-    updated_at: string;
   }[];
 }
 
@@ -160,18 +35,9 @@ export interface PlagiarismMatch {
   matched_passages: { passage: string; length_chars: number }[];
 }
 
-export interface WebCheckResult {
-  available: boolean;
-  results: { title: string; url: string; snippet: string }[];
-  provider: string | null;
-  disclaimer?: string;
-  error: string | null;
-}
-
 export interface PlagiarismReport {
   local_only: boolean;
   disclaimer: string;
-  web: WebCheckResult;
   word_count: number;
   sentence_count: number;
   checked_references: number;
@@ -210,18 +76,6 @@ export interface Reference {
   created_at: string;
 }
 
-export interface HumanizePayload {
-  text: string;
-  title?: string | null;
-  mode: string;
-  intensity: string;
-  preserve_formatting: boolean;
-  keep_quotes: boolean;
-  clean_invisible: boolean;
-  provider_id?: string | null;
-}
-
-
 export interface DiffSegment {
   type: "equal" | "changed";
   text?: string;
@@ -229,29 +83,43 @@ export interface DiffSegment {
   rewritten: string;
   risk: "none" | "meaning" | "number";
   low_change?: boolean;
-  flat_rhythm?: boolean;
   sentence_start?: boolean;
   sentence_end?: boolean;
+  sentence_space?: boolean;
 }
 
-export interface DiffStylePattern { id: string; name: string; count: number; }
-export interface DiffStyleSide { total: number; strong: number; weak: number; by_pattern: DiffStylePattern[]; }
-export interface DiffStructure { sentences_total: number; sentences_restructured: number; average_change_pct: number; }
-export interface DiffStyle {
-  before: DiffStyleSide;
-  after: DiffStyleSide;
-  removed: number;
-  remaining: DiffStylePattern[];
-  changed_words_pct: number;
-  banned_words_removed: number;
-  rhythm_varied: number;
-  paragraphs_total: number;
-  structure: DiffStructure;
+export interface SentenceRecord {
+  source_ids: number[];
+  source: string;
+  text: string;
+  rules: string[];
+  similarity: number;
+  status: "restructured" | "lexical" | "unchanged";
+  restructured: boolean;
+  flags: string[];
 }
 
-export interface DiffReport {
-  segments: DiffSegment[];
-  changed: number;
-  review: number;
-  style: DiffStyle;
+export interface StyleCheck {
+  patterns_before: number;
+  patterns_after: number;
+  patterns_removed: number;
+  sentences_restructured: number;
+  sentences_total: number;
+  words_changed_pct: number;
+}
+
+export interface HumanizePayload {
+  text: string;
+  tone: string;
+  strength: string;
+  variation: number;
+  clean_invisible: boolean;
+}
+
+export interface HumanizeResult {
+  rewritten: string;
+  sentences: SentenceRecord[];
+  diff: { segments: DiffSegment[]; changed: number; review: number };
+  style_check: StyleCheck;
+  document_id: number;
 }

@@ -1,7 +1,6 @@
 """Plagiarism/similarity check, reference library and the local style signal."""
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
 
@@ -9,10 +8,9 @@ from fastapi import APIRouter, Depends
 
 from backend.api.deps import require_owner
 from backend.api.errors import fail
-from backend.api.schemas import DiffRequest, ReferenceRequest, TextRequest
+from backend.api.schemas import ReferenceRequest, TextRequest
 from backend.db import repository
 from backend.core import detector, plagiarism
-from backend.core.rewrite_diff import diff_from_alignment, diff_segments, style_report
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[Depends(require_owner)])
 
@@ -25,12 +23,6 @@ def _record(kind: str, text: str, result: dict[str, Any]) -> None:
 async def check_plagiarism(payload: TextRequest) -> dict[str, Any]:
     references = repository.reference_documents_with_content()
     result = plagiarism.check(payload.text, references)
-    try:
-        result["web"] = await asyncio.wait_for(
-            asyncio.to_thread(plagiarism.web_check, payload.text), timeout=20.0
-        )
-    except Exception as exc:
-        result["web"] = {"available": False, "results": [], "provider": "ddgs", "error": str(exc)}
     _record("plagiarism", payload.text, result)
     return result
 
@@ -68,23 +60,3 @@ async def detect_style(payload: TextRequest) -> dict[str, Any]:
     result = detector.analyze(payload.text)
     _record("detector", payload.text, result)
     return result
-
-
-@router.post("/diff")
-async def diff_text(payload: DiffRequest) -> dict[str, Any]:
-    original = payload.original
-    rewritten = payload.rewritten
-    alignment = payload.alignment or None
-    if alignment:
-        segments = diff_from_alignment(alignment)
-    else:
-        segments = diff_segments(original, rewritten)
-    style = style_report(original, rewritten, alignment)
-    changed = sum(1 for s in segments if s.get("type") == "changed")
-    review = sum(1 for s in segments if s.get("type") == "changed" and s.get("risk") in {"meaning", "number"})
-    return {
-        "segments": segments,
-        "changed": changed,
-        "review": review,
-        "style": style,
-    }

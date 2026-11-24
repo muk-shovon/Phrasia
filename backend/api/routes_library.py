@@ -23,15 +23,9 @@ async def get_document(document_id: int) -> dict[str, Any]:
     document = repository.get_document(document_id)
     if document is None:
         raise fail(404, "That document does not exist.", "not_found")
-    versions = repository.list_versions(document_id)
-    latest_content = ""
-    if versions:
-        latest = repository.get_version(int(versions[0]["id"]))
-        if latest is not None:
-            latest_content = str(latest["content"])
+    versions = repository.versions_with_content(document_id)
     document["versions"] = versions
-    document["jobs"] = repository.list_jobs_for_document(document_id)
-    document["content"] = latest_content
+    document["content"] = repository.latest_version(document_id, "humanized") or repository.latest_version(document_id, "source") or ""
     return document
 
 

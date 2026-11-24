@@ -5,7 +5,6 @@ import { renderDetector } from "./pages/detector";
 import { renderHistory } from "./pages/history";
 import { renderHumanize } from "./pages/humanize";
 import { renderPlagiarism } from "./pages/plagiarism";
-import { renderSettings } from "./pages/settings";
 
 type Page = (root: HTMLElement) => Promise<void>;
 
@@ -18,11 +17,10 @@ interface Route {
 }
 
 const ROUTES: Route[] = [
-  { hash: "#/humanize",   label: "Humanize",        helper: "Rewrite and refine",   icon: ICONS.humanize,   page: renderHumanize },
-  { hash: "#/plagiarism", label: "Plagiarism", helper: "Local and web checks", icon: ICONS.plagiarism, page: renderPlagiarism },
-  { hash: "#/detector",   label: "Style Signal",    helper: "Named writing signals", icon: ICONS.detector,   page: renderDetector },
-  { hash: "#/history",    label: "History",         helper: "Documents and jobs",   icon: ICONS.history,    page: renderHistory },
-  { hash: "#/settings",   label: "Settings",        helper: "Providers and preferences", icon: ICONS.settings, page: renderSettings },
+  { hash: "#/humanize",   label: "Humanize",     helper: "Rewrite and refine",  icon: ICONS.humanize,   page: renderHumanize },
+  { hash: "#/plagiarism", label: "Plagiarism",   helper: "Local reference check", icon: ICONS.plagiarism, page: renderPlagiarism },
+  { hash: "#/detector",   label: "Style Signal", helper: "Pattern highlights",  icon: ICONS.detector,   page: renderDetector },
+  { hash: "#/history",    label: "History",      helper: "Documents and versions", icon: ICONS.history,  page: renderHistory },
 ];
 
 const DEFAULT_HASH = "#/humanize";
