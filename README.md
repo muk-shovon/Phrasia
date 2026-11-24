@@ -1,241 +1,104 @@
 # Phrasia — Words, Refined.
 
-An intelligent workspace for better writing. Private, premium, single-owner.
+A private, single-user writing workspace that runs on your own computer. It rewrites text through an external model you choose, keeps your drafts in a local database, and offers two honest local analysis tools.
 
-**Tagline:** Words, Refined.  
-**Descriptor:** An intelligent workspace for better writing.
+## What works today
 
----
+| Tool | Status | How it works |
+|---|---|---|
+| **Humanizer / Rewriter** | Working, needs a provider key | Text is split into chunks, rewritten by an online model (Gemini, Groq, OpenRouter or a custom OpenAI-compatible endpoint), checkpointed after every chunk, and can be retried, cancelled, reopened and exported. |
+| **Similarity check** | Working, local only | Compares a passage with your own reference library using word n-grams. It does **not** search the internet and does not claim originality. |
+| **Local style signal** | Working, local only | Reports named writing patterns (stock phrases, inflated words, contractions, rhythm, repetition) with a plain-language label. No score, no percentage, no authorship verdict. |
 
-## Table of contents
+There is no authentication yet. The app binds to `127.0.0.1` only and is intended for one person on one machine.
 
-1. [What this is](#what-this-is)
-2. [Tech stack](#tech-stack)
-3. [Prerequisites](#prerequisites)
-4. [Local development](#local-development)
-5. [Configuration](#configuration)
-6. [Running tests](#running-tests)
-7. [Deployment](#deployment)
-8. [Security notes](#security-notes)
-9. [Known limitations](#known-limitations)
-10. [Troubleshooting](#troubleshooting)
+## Stack
 
----
+- **Backend:** Python 3.11+, FastAPI, uvicorn, SQLite (`sqlite3`), httpx, python-docx
+- **Frontend:** Vite, TypeScript (strict), Tailwind CSS v4 — no UI framework, no runtime npm packages
+- **Intelligence:** external HTTP APIs only. No local models are downloaded or run.
 
-## What this is
-
-Phrasia lets you paste or upload a document, select a humanization mode, and send it through a real external AI API (Gemini, Groq, FreeLLMAPI, or OpenAI) to produce a clearer, more natural rewrite. Results are saved to Supabase, chunked for long documents, and resumable after interruptions.
-
-**Three planned capabilities** (only the Humanizer is fully functional in this release):
-
-1. ✅ **AI Humanizer / Rewriter** — working
-2. 🚧 **Plagiarism / Similarity Checker** — phases 3, in progress
-3. 🚧 **AI Writing Detector** — phases 4, in progress
-
----
-
-## Tech stack
-
-| Layer | Technology |
-|-------|-----------|
-| Language | Python 3.11+ |
-| UI framework | Reflex (Python-authored) |
-| Backend runtime | Vercel Serverless Functions |
-| Database | Supabase PostgreSQL |
-| Auth | Supabase Auth |
-| File storage | Supabase Storage (private buckets) |
-| Job queue | Supabase Queues / Postgres-backed claim queue |
-| Scheduler | Supabase Cron → Vercel worker tick |
-| External APIs | Gemini, Groq, FreeLLMAPI, OpenAI (provider adapters) |
-| Testing | pytest + pytest-asyncio |
-| Linting/formatting | ruff |
-
----
-
-## Prerequisites
-
-- Python 3.11 or 3.12
-- A Supabase Free project ([supabase.com/dashboard](https://supabase.com/dashboard))
-- A Vercel Hobby account linked to this repository
-- At least one external API key (Gemini free-tier recommended)
-
----
-
-## Local development
+## Quick start (Windows PowerShell)
 
 ```powershell
-# Navigate to project root
-cd "D:\My Own Web APP\Phrasia"
-
-# Create virtual environment (Windows PowerShell)
 python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
 
-# Install dependencies
-pip install -e ".[dev]"
+cd frontend
+npm install
+npm run build
+cd ..
 
-# Copy and fill environment variables
-copy .env.example .env
-# Edit .env and add your SUPABASE_URL, SUPABASE_SECRET_KEY, GEMINI_API_KEY, etc.
-
-# Run tests
-pytest tests/unit/ -v
-
-# Start the Reflex dev server
-reflex run --port 3000
+python run.py
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open <http://127.0.0.1:8000/#/humanize>. API docs are at <http://127.0.0.1:8000/api/docs>.
 
----
+To actually humanize, add a free key either in `.env` (for example `GEMINI_API_KEY=…`) or in the **Settings** page. With no key, the UI loads and the analysis tools work, but a humanize job stops with a clear "no provider configured" error. See [docs/APIS.md](docs/APIS.md) for the endpoints and their verified status.
+
+For frontend development with hot reload: run `npm run dev` in `frontend/` while the backend runs on port 8000 (Vite proxies `/api`).
 
 ## Configuration
 
-Copy `.env.example` to `.env` and fill in the values below. **Never commit `.env`** — it is already in `.gitignore`.
+All settings are optional except a provider key for humanizing.
 
-| Variable | Required? | Source |
-|----------|-----------|--------|
-| `SUPABASE_URL` | ✅ Yes | Supabase Dashboard → Settings → API |
-| `SUPABASE_PUBLISHABLE_KEY` | ✅ Yes | Same location |
-| `SUPABASE_SECRET_KEY` | ✅ Yes | Same location (service-role key) |
-| `GEMINI_API_KEY` | Recommended | [aistudio.google.com](https://aistudio.google.com/app/apikey) |
-| `GROQ_API_KEY` | Optional | [console.groq.com/keys](https://console.groq.com/keys) |
-| `FREELLMAPI_API_KEY` | Optional | Your local FreeLLMAPI gateway |
-| `WORKER_CRON_SECRET` | For production | Generate: `openssl rand -hex 32` |
-| `PHRASIA_SECRET_ENCRYPTION_KEY` | For production | Generate: `openssl rand -hex 32` |
-| `PAID_PROVIDERS_ENABLED` | `false` by default | Keep `false` unless you intend to pay |
+| Variable | Default | Purpose |
+|---|---|---|
+| `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `CUSTOM_API_KEY` | empty | Provider credentials |
+| `GEMINI_MODEL`, `GROQ_MODEL`, `OPENROUTER_MODEL`, `CUSTOM_MODEL` | catalog defaults | Model selection |
+| `GEMINI_BASE_URL`, `GROQ_BASE_URL`, `OPENROUTER_BASE_URL`, `CUSTOM_BASE_URL` | catalog defaults | Endpoint overrides (public URLs only) |
+| `PAID_MODELS_ENABLED` | `false` | Allows catalog models marked paid |
+| `PROVIDER_TIMEOUT_SECONDS` | `60` | Per-request timeout |
+| `HUMANIZE_CHUNK_CHARS` | `6000` | Chunk size |
+| `MAX_INPUT_CHARS` | `200000` | Per-document input limit |
+| `MAX_UPLOAD_BYTES` | `20971520` | File upload limit |
+| `PHRASIA_DATA_DIR` / `PHRASIA_DB_PATH` | `data/phrasia.db` | Local database location |
+| `PHRASIA_PORT` | `8000` | Backend port |
 
-After setting `SUPABASE_*` variables, apply migrations:
+Keys saved in Settings override `.env` values for that provider.
 
-```powershell
-npx supabase login
-npx supabase link --project-ref YOUR_PROJECT_REF
-npx supabase db push
-```
-
-To disable public sign-up (single-owner security), go to Supabase Dashboard → Authentication → Providers → Email → toggle **"Enable sign up"** off.
-
----
-
-## Running tests
+## Tests and checks
 
 ```powershell
-pytest tests/unit/ -v
-pytest tests/unit/ -k chunking -v       # only chunk tests
-pytest tests/unit/ --tb=short           # concise tracebacks on failure
+.\.venv\Scripts\python.exe -m pytest -q
+cd frontend
+npx tsc --noEmit
+npm run build
 ```
 
-Mock-based tests do **not** call real APIs. To run a live smoke test against a configured provider, uncomment the `LIVE_API_TEST=1` guard in the relevant test file.
+On 2026-11-24 these ran successfully: **49 Python tests passed**, TypeScript emitted no errors, and the production frontend build completed.
 
----
-
-## Deployment
-
-### Step 1 — Push to Git
-
-```powershell
-git init
-git add .
-git commit -m "Initial Phrasia scaffold"
-git branch -M main
-git remote add origin https://github.com/YOUR_USER/phrasia.git
-git push -u origin main
-```
-
-### Step 2 — Connect to Vercel
-
-```powershell
-npx vercel login
-npx vercel link
-npx vercel env add SUPABASE_URL        # paste value
-npx vercel env add SUPABASE_SECRET_KEY # paste value
-npx vercel env add GEMINI_API_KEY      # paste value
-# ... repeat for every variable in .env
-npx vercel --prod
-```
-
-### Step 3 — Configure Reflex API URL
-
-Add a Vercel environment variable:
+## Layout
 
 ```
-REFLEX_API_URL=https://your-project.vercel.app
+backend/
+  api/          thin HTTP routes; every router uses require_owner()
+  db/           all SQL lives in repository.py
+  providers/    catalog, adapters, credential resolution
+  core/         chunking, prompts, orchestration, similarity, style signal
+frontend/
+  src/pages/    one TypeScript module per page
+  src/api.ts    typed fetch wrapper
+data/           local SQLite file (created on first run, never committed)
+docs/APIS.md    external API inventory
+DECISIONS.md    architecture decisions
 ```
-
-This tells the exported Reflex frontend where to send events.
-
-### Step 4 — Verify deployment
-
-Visit your Vercel URL. Sign in with Supabase Auth. Paste text in the workspace, click **Humanize Text**, and watch it process through the configured provider.
-
-### Important notes
-
-- The **first Vercel deploy** may take 2–3 minutes to build the Python runtime.
-- Refl ex exports static assets to `.web/`; Vercel serves those plus the Python function at `.vercel/functions/api.func/`.
-- After deployment, RLS policies ensure each user can only access their own documents.
-- Public sign-up must be disabled in Supabase Dashboard after creating your owner account.
-
----
 
 ## Security notes
 
-- Provider API keys and `SUPABASE_SECRET_KEY` are **server-side only**. They never reach the browser.
-- RLS policies on every table enforce owner scoping. Unauthorized queries return empty sets.
-- Large uploads go directly to Supabase Storage via signed URLs — they do not flow through Vercel Functions.
-- `.env` is gitignored; secrets belong in Vercel Environment Variables, not source control.
-- The application never claims rewritten text is human-authored or that any AI detector has been bypassed.
-
----
+- The server binds to `127.0.0.1`; there is no login page or owner check beyond the `require_owner()` placeholder in `backend/api/deps.py`. Do not expose it to a network.
+- Keys typed in Settings are stored **in plain text** in the local SQLite database. Keys in `.env` stay in that file. Neither is committed. Keep both private.
+- Custom base URLs must be public `http(s)` addresses; loopback and private ranges are rejected.
+- Full keys are never returned by the API; Settings only receives a masked value.
+- Only TXT, Markdown and DOCX uploads are read. PDF is not supported.
 
 ## Known limitations
 
-| Limitation | Detail |
-|------------|--------|
-| No SQLite fallback | Production requires Supabase; local dev may use `supabase start` or skip DB features |
-| Long documents need multiple requests | Chunked processing is resumable but takes time proportional to document length |
-| Provider quotas change | Free tiers may be modified by providers without notice; the app handles 429/quota errors gracefully |
-| DOCX import/export | Basic structure preserved; complex formatting may simplify |
-| Vercel Hobby restrictions | Personal/non-commercial use only; 300 s function duration limit; daily cron only on Hobby plan (use Supabase Cron instead) |
-| AI detector scores | Not implemented in this release (Phase 4) |
-| Plagiarism scanning | Not implemented in this release (Phase 3) |
+- No account system, no multi-user support, no cloud sync.
+- Similarity is limited to your reference library, and the style signal is a heuristic — neither is an authorship test.
+- Very large documents are chunked but still limited by `MAX_INPUT_CHARS`.
+- Concurrency is single-process; a server restart marks in-flight jobs as paused so they can be retried.
+- Only TXT and DOCX export; no diff view, batch jobs or PDF reports.
 
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|-------------|-----|
-| `ModuleNotFoundError: reflex` | Virtual environment not activated | Activate `.venv`, reinstall with `pip install -e .` |
-| Blank page on localhost | Reflex dev server failed to bind port | Try `reflex run --port 3001` or check another process holds port 3000 |
-| "No eligible provider" error | No provider API key in `.env` | Add `GEMINI_API_KEY` or `FREELLMAPI_API_KEY` |
-| 401 on API calls | Missing or wrong `SUPABASE_SECRET_KEY` | Regenerate from Supabase Dashboard → Settings → API |
-| Stuck on "queued" status | Worker not invoked | Check Supabase Cron configuration; local dev skips worker ticks |
-| Upload fails at >50 MB | Supabase Free plan object limit | Reduce file size or upgrade Supabase plan |
-| "Public sign-up not disabled" warning | New Supabase projects allow registrations by default | Toggle off in Dashboard → Authentication → Providers |
-
----
-
-## File structure
-
-```
-phrasia/
-├── app/
-│   └── pages/          Reflex pages (workspace, history, settings)
-├── core/               Business logic (chunker, prompts, humanizer service)
-├── infrastructure/     Supabase client, worker tick handler
-├── providers/          Provider adapters and router
-├── api/                Vercel API routes
-├── supabase/migrations SQL migrations
-├── tests/unit/         Unit tests
-├── phrasia_domain.py   Domain models and enums
-├── rxconfig.py         Reflex app definition
-├── pyproject.toml      Python dependencies
-├── vercel.json         Vercel configuration
-├── .env.example        Configuration template
-└── *.md                Documentation
-```
-
----
-
-**Phrasia — Words, Refined.**
-Built with Python, Reflex, Supabase, and external AI APIs.
+Architecture choices and their reasons are recorded in [DECISIONS.md](DECISIONS.md).
