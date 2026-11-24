@@ -51,9 +51,15 @@ def extract_spans(text: str) -> tuple[str, list[Span]]:
 
 
 def restore_spans(redacted: str, spans: list[Span]) -> str | None:
-    """Put every placeholder back. Returns None when restoration is not exact."""
+    """Put every placeholder back.
+
+    Returns None when restoration is not exact: every placeholder must come
+    back exactly once, so both "missing" and "still present" count as a retry.
+    """
     result = redacted
     for span in spans:
+        if result.count(span.placeholder) == 0:
+            return None
         result = result.replace(span.placeholder, span.original, 1)
 
     if any(span.placeholder in result for span in spans):

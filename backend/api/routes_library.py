@@ -8,8 +8,8 @@ from fastapi import APIRouter, Depends, Query, Request
 from backend.api.deps import require_owner
 from backend.api.errors import fail
 from backend.config import MAX_UPLOAD_BYTES
-from backend.db import repository
 from backend.core import documents
+from backend.db import repository
 
 router = APIRouter(prefix="/api", tags=["library"], dependencies=[Depends(require_owner)])
 

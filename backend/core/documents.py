@@ -1,4 +1,4 @@
-"""Text extraction and DOCX export (no local models, standard libraries + python-docx)."""
+"""Text extraction and DOCX export (standard libraries + python-docx)."""
 from __future__ import annotations
 
 import io
@@ -57,13 +57,8 @@ def _extract_docx(data: bytes) -> str:
 def export_docx(text: str) -> bytes:
     """Render plain text as a simple DOCX file with one paragraph per block."""
     from docx import Document
-    from docx.shared import Pt
 
     document = Document()
-    style = document.styles["Normal"]
-    style.font.name = "Calibri"
-    style.font.size = Pt(11)
-
     for block in text.split("\n\n"):
         cleaned = block.strip("\n")
         if cleaned.strip():

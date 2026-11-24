@@ -81,11 +81,11 @@ def test_truncated_output_is_retried_then_fails() -> None:
     assert job is not None
     assert job["status"] == "failed"
     assert "cut off" in str(job["error"]).lower()
-    assert len(fake.calls) == 2  # one normal attempt, one with more tokens
+    assert len(fake.calls) == 3  # bounded retries with more tokens
 
     chunks = repository.list_chunks(job_id)
     assert chunks[0]["status"] == "error"
-    assert chunks[0]["attempt_count"] == 2
+    assert chunks[0]["attempt_count"] == 3
 
 
 def test_fallback_uses_the_next_provider() -> None:

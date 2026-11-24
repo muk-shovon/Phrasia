@@ -56,6 +56,8 @@ async def create_humanization(
             options=HumanizeOptions(
                 preserve_formatting=payload.preserve_formatting,
                 keep_quotes=payload.keep_quotes,
+                deep_humanize=payload.deep_humanize,
+                remove_em_dashes=payload.remove_em_dashes,
             ),
             provider_id=payload.provider_id,
         )

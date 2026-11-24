@@ -21,7 +21,7 @@ class ModelSpec:
 class ProviderSpec:
     id: str
     name: str
-    adapter: str  # "gemini" | "openai_compatible"
+    adapter: str  # matches backend/providers/adapters/<adapter>.py
     tier: str  # "free" | "paid"
     env_key: str
     env_model: str
@@ -50,7 +50,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
     ProviderSpec(
         id="groq",
         name="Groq",
-        adapter="openai_compatible",
+        adapter="groq",
         tier="free",
         env_key="GROQ_API_KEY",
         env_model="GROQ_MODEL",
@@ -63,7 +63,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
     ProviderSpec(
         id="openrouter",
         name="OpenRouter",
-        adapter="openai_compatible",
+        adapter="openrouter",
         tier="free",
         env_key="OPENROUTER_API_KEY",
         env_model="OPENROUTER_MODEL",
@@ -76,7 +76,7 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
     ProviderSpec(
         id="custom",
         name="Custom OpenAI-compatible endpoint",
-        adapter="openai_compatible",
+        adapter="custom",
         tier="free",
         env_key="CUSTOM_API_KEY",
         env_model="CUSTOM_MODEL",
@@ -114,10 +114,7 @@ MODELS: dict[str, tuple[ModelSpec, ...]] = {
             "google/gemini-2.0-flash-exp:free",
             "Gemini 2.0 Flash Exp (free)",
         ),
-        ModelSpec(
-            "deepseek/deepseek-r1:free",
-            "DeepSeek R1 (free)",
-        ),
+        ModelSpec("deepseek/deepseek-r1:free", "DeepSeek R1 (free)"),
         ModelSpec("deepseek/deepseek-chat", "DeepSeek Chat", paid=True),
         ModelSpec("openai/gpt-4o-mini", "GPT-4o mini", paid=True),
         ModelSpec("anthropic/claude-3.5-sonnet", "Claude 3.5 Sonnet", paid=True),

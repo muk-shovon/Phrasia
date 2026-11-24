@@ -4,12 +4,21 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from backend.config import PAID_MODELS_ENABLED
 from backend.db import repository
 from backend.providers import catalog
 from backend.providers.adapters.gemini import GeminiProvider
-from backend.providers.adapters.openai_compatible import OpenAICompatibleProvider
+from backend.providers.adapters.groq import GroqProvider
+from backend.providers.adapters.openrouter import OpenRouterProvider
+from backend.providers.adapters.custom import CustomProvider
 from backend.providers.base import Provider
+
+
+_ADAPTERS = {
+    "gemini": GeminiProvider,
+    "groq": GroqProvider,
+    "openrouter": OpenRouterProvider,
+    "custom": CustomProvider,
+}
 
 
 def mask_key(key: str) -> str:
@@ -25,7 +34,7 @@ def mask_key(key: str) -> str:
 class ConfiguredProvider:
     spec: catalog.ProviderSpec
     provider: Provider
-    source: str  # "saved" | "env"
+    source: str  # "saved" | "env" | "none"
     masked_key: str
     model: str
     base_url: str
@@ -61,19 +70,12 @@ class ProviderRegistry:
             return None
 
         source = "saved" if saved.get("api_key") else ("env" if values["key"] else "none")
-        if spec.adapter == "gemini":
-            provider: Provider = GeminiProvider(
-                api_key=values["key"],
-                model=values["model"],
-                base_url=values["base"],
-            )
-        else:
-            provider = OpenAICompatibleProvider(
-                provider_id=provider_id,
-                api_key=values["key"],
-                model=values["model"],
-                base_url=values["base"],
-            )
+        provider_class = _ADAPTERS[spec.adapter]
+        provider = provider_class(
+            api_key=values["key"],
+            model=values["model"],
+            base_url=values["base"],
+        )
         return ConfiguredProvider(
             spec=spec,
             provider=provider,
@@ -145,7 +147,3 @@ class ProviderRegistry:
         if configured is None:
             return False, "This provider is not configured."
         return await configured.provider.health()
-
-
-def paid_models_enabled() -> bool:
-    return PAID_MODELS_ENABLED

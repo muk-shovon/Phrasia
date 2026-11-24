@@ -13,6 +13,8 @@ class HumanizeRequest(BaseModel):
     intensity: str = Field(default="medium", max_length=20)
     preserve_formatting: bool = True
     keep_quotes: bool = True
+    deep_humanize: bool = False
+    remove_em_dashes: bool = False
     provider_id: str | None = Field(default=None, max_length=60)
 
 
