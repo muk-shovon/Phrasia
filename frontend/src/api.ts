@@ -2,7 +2,6 @@ import type {
   DetectorReport,
   DocumentDetail,
   DocumentSummary,
-  ExtractedText,
   HumanizePayload,
   JobDetail,
   JobSummary,
@@ -143,47 +142,7 @@ export const api = {
   detect: (text: string) =>
     request<DetectorReport>("/api/detector/check", json("POST", { text })),
 
-  async extractFile(file: File): Promise<ExtractedText> {
-    const response = await fetch(
-      `/api/documents/extract?filename=${encodeURIComponent(file.name)}`,
-      { method: "POST", body: file },
-    );
-    if (!response.ok) {
-      let payload: unknown = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-      throw new ApiError(
-        messageFromPayload(payload, "Could not read that file."),
-        response.status,
-        "extract_failed",
-      );
-    }
-    return (await response.json()) as ExtractedText;
-  },
 
-  async uploadReference(file: File): Promise<Reference> {
-    const response = await fetch(
-      `/api/plagiarism/references/upload?filename=${encodeURIComponent(file.name)}`,
-      { method: "POST", body: file },
-    );
-    if (!response.ok) {
-      let payload: unknown = null;
-      try {
-        payload = await response.json();
-      } catch {
-        payload = null;
-      }
-      throw new ApiError(
-        messageFromPayload(payload, "Could not upload that file."),
-        response.status,
-        "upload_failed",
-      );
-    }
-    return (await response.json()) as Reference;
-  },
 
   async downloadJob(id: number, format: "txt" | "docx", title: string): Promise<void> {
     const response = await fetch(`/api/jobs/${id}/export?format=${format}`);

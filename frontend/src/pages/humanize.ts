@@ -1,275 +1,222 @@
-import { api, errorMessage } from "../api";
+﻿import { api, errorMessage } from "../api";
 import type { JobDetail } from "../types";
 import {
-  badge,
   button,
   card,
+  clear,
   el,
-  formatNumber,
+  fieldWrap,
+  getToggle,
+  ICONS,
   pageHead,
+  select,
+  setButtonLoading,
   setDraft,
+  statusBadge,
   takeDraft,
+  textarea,
   toast,
+  toggle,
   wordCount,
 } from "../ui";
 
 const POLL_MS = 1200;
 
-// ── word-level diff (pure TS, no library) ──────────────────────────────────
-interface DiffChunk {
-  kind: "context" | "delete" | "insert";
-  text: string;
-}
-
+interface DiffChunk { kind: "context" | "delete" | "insert"; text: string; }
 function diffWords(a: string[], b: string[]): DiffChunk[] {
-  const n = a.length;
-  const m = b.length;
+  const n = a.length, m = b.length;
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const chunks: DiffChunk[] = [];
-  let i = 0;
-  let j = 0;
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out: DiffChunk[] = [];
+  let i = 0, j = 0;
   while (i < n && j < m) {
-    if (a[i] === b[j]) {
-      chunks.push({ kind: "context", text: a[i] });
-      i++;
-      j++;
-    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-      chunks.push({ kind: "delete", text: a[i] });
-      i++;
-    } else {
-      chunks.push({ kind: "insert", text: b[j] });
-      j++;
-    }
+    if (a[i] === b[j]) { out.push({ kind: "context", text: a[i++] }); j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) out.push({ kind: "delete", text: a[i++] });
+    else out.push({ kind: "insert", text: b[j++] });
   }
-  while (i < n) chunks.push({ kind: "delete", text: a[i++] });
-  while (j < m) chunks.push({ kind: "insert", text: b[j++] });
-  return chunks;
+  while (i < n) out.push({ kind: "delete", text: a[i++] });
+  while (j < m) out.push({ kind: "insert", text: b[j++] });
+  return out;
 }
-
-function segments(value: string): string[] {
-  return value.split(/(\s+)/).filter((part) => part);
-}
-
-const TEXT_AREA_CLASS =
-  "w-full resize-y rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-3 text-base leading-7 text-[#1D3026] outline-none transition placeholder:text-[#8C9890] focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15";
-
-const SELECT_CLASS =
-  "w-full max-w-xl rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-2.5 text-base text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15";
-
-function select(label: string, options: Array<{ value: string; label: string }>): HTMLSelectElement {
-  const wrapper = el("div", "mb-3 flex items-center gap-3");
-  wrapper.append(el("span", "w-32 shrink-0 text-sm font-semibold text-[#25352A]", label));
-  const selectEl = el("select", SELECT_CLASS);
-  for (const option of options) {
-    const o = el("option", "", option.label);
-    o.value = option.value;
-    selectEl.append(o);
-  }
-  wrapper.append(selectEl);
-  return selectEl;
-}
+const segments = (v: string): string[] => v.split(/(\s+)/).filter(Boolean);
 
 export async function renderHumanize(root: HTMLElement): Promise<void> {
   const [meta, settings] = await Promise.all([api.meta(), api.settings()]);
-  const configured = settings.providers.filter((provider) => provider.configured);
+  const configured = settings.providers.filter((p) => p.configured);
 
   root.replaceChildren(
-    pageHead(
-      "Humanizer",
-      "Paste text, rewrite it, review and export. You stay in control of every step.",
-    ),
+    pageHead("Humanizer", "Paste your text, refine the writing, review changes, and export the result."),
   );
 
+  // ---- Settings panel ----
+  const settingsCard = card("mb-6");
+  settingsCard.append(el("h2", "text-base font-semibold text-[var(--color-text)] mb-4", "Rewrite settings"));
+  const settingsGrid = el("div", "grid gap-4 sm:grid-cols-2 xl:grid-cols-4");
+
+  const modeSel = select(meta.modes.map((m) => ({ value: m.id, label: m.label })));
+  modeSel.value = "balanced";
+  settingsGrid.append(fieldWrap("Writing style", modeSel));
+
+  const intensitySel = select(meta.intensities.map((m) => ({ value: m.id, label: m.label })));
+  intensitySel.value = "medium";
+  settingsGrid.append(fieldWrap("Rewrite intensity", intensitySel));
+
+  const providerOpts = [{ value: "", label: "Auto (free catalog)" }, ...configured.map((p) => ({ value: p.id, label: p.name }))];
+  const providerSel = select(providerOpts);
+  settingsGrid.append(fieldWrap("Provider", providerSel));
+
+  const preserveWrap = el("div", "flex flex-col justify-end");
+  const preserveRow = el("label", "flex items-center gap-3 min-h-[42px] cursor-pointer");
+  const preserveToggle = toggle(true, "Preserve formatting");
+  preserveRow.append(preserveToggle, el("span", "text-sm font-medium text-[var(--color-text)]", "Preserve formatting"));
+  preserveWrap.append(el("span", "field-label", "Formatting"), preserveRow);
+  settingsGrid.append(preserveWrap);
+
+  settingsCard.append(settingsGrid);
   if (configured.length === 0) {
-    root.append(
-      card("border-[#F0E7D4] bg-[#FDF6E7]"),
-      el("div", "h-6"),
-    );
-    root.append(el("h3", "text-base font-semibold text-[#7D5A12]", "No provider is configured yet."));
-    root.append(
-      el(
-        "p",
-        "mt-2 text-sm text-[#7D5A12]",
-        "Add a free anonymous endpoint in Settings, or humanize against the catalog defaults.",
-      ),
-    );
+    const note = el("div", "mt-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-cornsilk-600)] px-4 py-3 text-sm text-[var(--color-text-muted)]");
+    note.innerHTML = `No provider key saved. Anonymous free endpoints from the catalog are used by default. You can configure providers in <a href="#/settings" class="font-semibold text-[var(--color-primary)] underline underline-offset-2">Settings</a>.`;
+    settingsCard.append(note);
   }
+  root.append(settingsCard);
 
-  // ── controls ─────────────────────────────────────────────────────────────
-  const controls = card();
-  const controlRow = el("div", "flex flex-wrap items-center gap-4");
-  const modeSelect = select("Mode", meta.modes.map((m) => ({ value: m.id, label: m.label })));
-  modeSelect.value = "balanced";
-  const intensitySelect = select("Tone / intensity", meta.intensities.map((m) => ({ value: m.id, label: m.label })));
-  intensitySelect.value = "medium";
-  const providerSelect = select(
-    "Provider",
-    [
-      { value: "", label: "Auto — free lanes (no key)" },
-      ...configured.map((provider) => ({ value: provider.id, label: provider.name })),
-    ],
-  );
-  const preserveWrap = el("label", "flex items-center gap-3 text-sm font-semibold text-[#25352A]");
-  const preserveToggle = el("input", "h-5 w-9 accent-[#1F6B4A]");
-  preserveToggle.type = "checkbox";
-  preserveToggle.checked = true;
-  preserveWrap.append(preserveToggle, el("span", "", "Preserve formatting"));
-  controlRow.append(modeSelect, intensitySelect, providerSelect, preserveWrap);
-  controls.append(controlRow);
-  root.append(controls);
+  // ---- Workspace ----
+  const workspace = el("div", "workspace-grid");
 
-  // ── columns ──────────────────────────────────────────────────────────────
-  const columns = el("div", "grid gap-6 xl:grid-cols-2 xl:gap-8");
-  root.append(columns);
+  // Left panel
+  const left = card("flex flex-col min-w-0");
+  const leftHead = el("div", "flex flex-wrap items-center justify-between gap-3 mb-4");
+  leftHead.append(el("h2", "text-lg font-semibold text-[var(--color-text)]", "Original text"));
+  const leftMeta = el("div", "flex items-center gap-3");
+  const leftCount = el("span", "text-xs font-medium text-[var(--color-text-subtle)]", "0 words");
+  const clearBtn = button("Clear", "ghost", () => { original.value = ""; syncLeft(); }, { size: "sm" });
+  leftMeta.append(leftCount, clearBtn);
+  leftHead.append(leftMeta);
+  const original = textarea("Paste or type the text you want to refine...", 18);
+  original.classList.add("min-h-[320px]", "md:min-h-[420px]", "flex-1");
+  original.spellcheck = true;
+  left.append(leftHead, original);
+  workspace.append(left);
 
-  const leftPanel = card();
-  columns.append(leftPanel);
-  const leftTitle = el("div", "mb-4 flex items-center justify-between gap-4");
-  leftTitle.append(el("h3", "text-lg font-semibold text-[#16251C]", "Original"));
-  const wordsCounter = el("span", "text-xs text-[#5C6C62]");
-  leftTitle.append(wordsCounter);
+  // Right panel
+  const right = card("flex flex-col min-w-0");
+  const rightHead = el("div", "flex flex-wrap items-center justify-between gap-3 mb-4");
+  rightHead.append(el("h2", "text-lg font-semibold text-[var(--color-text)]", "Rewritten text"));
+  const rightMeta = el("div", "flex items-center gap-2");
+  const statusHost = el("div", "text-sm text-[var(--color-text-muted)]");
+  statusHost.setAttribute("aria-live", "polite");
+  const rightCount = el("span", "text-xs font-medium text-[var(--color-text-subtle)]", "0 words");
+  rightMeta.append(statusHost, rightCount);
+  rightHead.append(rightMeta);
+  const output = textarea("Your rewritten text will appear here after processing.", 18);
+  output.classList.add("min-h-[320px]", "md:min-h-[420px]", "flex-1", "bg-[var(--color-cornsilk-600)]");
+  output.readOnly = true;
+  right.append(rightHead, output);
 
-  const originalArea = el("textarea", `${TEXT_AREA_CLASS} min-h-[400px]`);
-  originalArea.value = takeDraft();
-  originalArea.spellcheck = true;
-  originalArea.addEventListener("keydown", (event) => {
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
-      event.preventDefault();
-      void submitJob();
-    }
-  });
-
-  const clearBtn = button("Clear", "secondary", () => {
-    originalArea.value = "";
-    wordCountUpdater();
-  });
-  leftTitle.append(clearBtn);
-  const rightPanel = card();
-  columns.append(rightPanel);
-  const rightTitle = el("div", "mb-4 flex flex-wrap items-center justify-between gap-4");
-  rightTitle.append(el("h3", "text-lg font-semibold text-[#16251C]", "Rewritten"));
-  const statusHost = el("span", "text-sm font-medium text-[#5C6C62]");
-  rightTitle.append(statusHost);
-  const progressTrack = el("div", "ml-4 h-1.5 w-24 shrink-0 overflow-hidden rounded-full bg-[#E8EBE5]");
-  const progressFill = el("div", "h-full w-0 rounded-full bg-[#1F6B4A] transition-all");
+  const progressWrap = el("div", "mt-4 hidden");
+  const progressLabel = el("div", "flex justify-between text-xs text-[var(--color-text-muted)] mb-1.5");
+  const progressText = el("span", "", "Processing...");
+  const progressPct = el("span", "", "0%");
+  progressLabel.append(progressText, progressPct);
+  const progressTrack = el("div", "progress-track");
+  const progressFill = el("div", "progress-fill");
+  progressFill.style.width = "0%";
   progressTrack.append(progressFill);
+  progressWrap.append(progressLabel, progressTrack);
+  right.append(progressWrap);
 
-  const outputArea = el("textarea", `${TEXT_AREA_CLASS} min-h-[440px] bg-white text-[#3D4B41]`);
-  outputArea.readOnly = true;
-  outputArea.placeholder = "Your rewritten text appears here when the job finishes.";
+  const errorNote = el("div", "mt-4 hidden rounded-lg border border-[rgba(122,59,46,0.2)] bg-[var(--color-danger-bg)] px-4 py-3 text-sm text-[var(--color-danger)]");
+  right.append(errorNote);
 
-  const errorNote = el("p", "mt-3 hidden text-sm leading-6 text-[#8B2020]");
-  const copyBtn = button("Copy", "secondary", () => void copy(outputArea.value));
-  const useAsInputBtn = button("Use as input", "primary", () => useAsInput());
-  const txtBtn = button("Download .txt", "secondary", () => void download("txt"), { disabled: true });
-  const docxBtn = button("Download .docx", "secondary", () => void download("docx"), { disabled: true });
-  const retryBtn = button("Retry failed chunks", "secondary", () => void retryJob(), { className: "hidden" });
-  const cancelBtn = button("Cancel job", "danger", () => void cancelJob(), { className: "hidden" });
-  const showDiffToggle = el("label", "mt-6 flex items-center gap-3 text-sm font-medium text-[#25352A]");
-  const showDiffInput = el("input", "h-5 w-9 accent-[#1F6B4A]");
-  showDiffInput.type = "checkbox";
-  showDiffToggle.append(showDiffInput, el("span", "", "Show changes"));
-
-  const diffHost = el("div", "mt-6 hidden space-y-3 rounded-xl bg-[#F5F7F3] p-5");
-  const diffOriginal = el("p", "text-sm text-[#3D4B41]");
-  const diffOutput = el("p", "text-sm text-[#1B5E3B]");
-  diffHost.append(diffOriginal, el("div", "h-3"), diffOutput);
-
+  // Actions
+  const actions = el("div", "mt-5 flex flex-wrap gap-2");
   const startBtn = button("Humanize", "primary", () => void submitJob());
+  const copyBtn = button("Copy", "secondary", () => void copyOutput(), { icon: ICONS.copy });
+  const useBtn = button("Use as input", "secondary", () => useAsInput());
+  const txtBtn = button("Download .txt", "secondary", () => void download("txt"), { icon: ICONS.download });
+  const docxBtn = button("Download .docx", "secondary", () => void download("docx"), { icon: ICONS.download });
+  const retryBtn = button("Retry failed chunks", "secondary", () => void retryJob());
+  const cancelBtn = button("Cancel job", "danger", () => void cancelJob());
+  retryBtn.classList.add("hidden");
+  cancelBtn.classList.add("hidden");
+  copyBtn.disabled = true; useBtn.disabled = true; txtBtn.disabled = true; docxBtn.disabled = true;
+  actions.append(startBtn, copyBtn, useBtn, txtBtn, docxBtn, retryBtn, cancelBtn);
+  right.append(actions);
 
-  async function submitJob(): Promise<void> {
-    const text = currentText();
-    if (!text) {
-      toast("There is no text to humanize.", "error");
-      return;
-    }
-    startBtn.disabled = true;
-    try {
-      const created = await api.humanize({
-        text,
-        mode: modeSelect.value,
-        intensity: intensitySelect.value,
-        provider_id: providerSelect.value || undefined,
-        preserve_formatting: preserveToggle.checked,
-        keep_quotes: preserveToggle.checked,
-      });
-      currentJob = null;
-      outputArea.value = "";
-      progressFill.style.width = "0%";
-      statusHost.textContent = "queued";
-      startBtn.textContent = "Starting…";
-      await poll(created.job_id);
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    } finally {
-      startBtn.disabled = false;
-      startBtn.textContent = "Humanize";
-    }
-  }
+  // Show changes
+  const diffRow = el("div", "mt-5 flex items-center gap-3 w-fit");
+  const diffToggle = toggle(false, "Show changes");
+  const diffLabel = el("span", "text-sm font-medium text-[var(--color-text)] cursor-pointer", "Show changes");
+  diffLabel.addEventListener("click", () => { diffToggle.click(); });
+  diffRow.append(diffToggle, diffLabel);
+  right.append(diffRow);
 
-  const toolbar = el("div", "mt-5 flex flex-wrap gap-2");
-  toolbar.append(startBtn, copyBtn, useAsInputBtn, txtBtn, docxBtn, retryBtn, cancelBtn);
-  rightPanel.append(rightTitle, outputArea, errorNote, toolbar, showDiffToggle, diffHost);
+  const diffHost = el("div", "mt-4 hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-cornsilk-600)] p-4");
+  const diffHeading = el("p", "text-xs font-semibold uppercase tracking-wider text-[var(--color-text-subtle)] mb-3", "Changes");
+  const diffContent = el("div", "text-sm leading-7 text-[var(--color-text)] whitespace-pre-wrap break-words");
+  diffHost.append(diffHeading, diffContent);
+  right.append(diffHost);
 
-  leftPanel.append(leftTitle, originalArea);
+  workspace.append(right);
+  root.append(workspace);
+
+  // ---- State ----
   let currentJob: JobDetail | null = null;
 
-  const wordCountUpdater = (): void => {
-    wordsCounter.textContent = `${formatNumber(wordCount(originalArea.value))} words`;
-  };
-  originalArea.addEventListener("input", wordCountUpdater);
-  wordCountUpdater();
+  const syncLeft = (): void => { leftCount.textContent = `${wordCount(original.value).toLocaleString()} words`; };
+  const syncRight = (): void => { rightCount.textContent = `${wordCount(output.value).toLocaleString()} words`; };
+  original.addEventListener("input", syncLeft);
+  original.value = takeDraft();
+  syncLeft(); syncRight();
 
-  function currentText(): string {
-    return originalArea.value.trim();
-  }
+  original.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); void submitJob(); }
+  });
 
-  function useAsInput(): void {
-    const text = outputArea.value.trim();
-    if (!text) return;
-    originalArea.value = text;
-    setDraft(text);
-    toast("Applied output as the new input.", "success");
+  function setOutputControls(hasOutput: boolean): void {
+    copyBtn.disabled = !hasOutput; useBtn.disabled = !hasOutput; txtBtn.disabled = !hasOutput; docxBtn.disabled = !hasOutput;
   }
 
   function renderDiff(): void {
-    const chunks = diffWords(segments(currentText()), segments(outputArea.value));
-    diffOriginal.replaceChildren(
-      ...chunks.map((chunk) => {
-        if (chunk.kind === "delete") return el("del", "text-[#B31F1F] decoration-solid line-through", chunk.text);
-        if (chunk.kind === "insert") return el("ins", "bg-[#E4F1E8] text-[#1B5E3B]", chunk.text);
-        return el("span", "", chunk.text);
-      }),
-    );
-    diffOutput.replaceChildren(
-      ...chunks.map((chunk) => (chunk.kind === "insert" ? el("span", "font-medium text-[#1B5E3B]", chunk.text) : el("span", "", chunk.text))),
-    );
+    const chunks = diffWords(segments(original.value), segments(output.value));
+    clear(diffContent);
+    for (const c of chunks) {
+      if (c.kind === "delete") diffContent.append(el("del", "diff-del", c.text));
+      else if (c.kind === "insert") diffContent.append(el("ins", "diff-ins no-underline", c.text));
+      else diffContent.append(document.createTextNode(c.text));
+    }
   }
 
-  showDiffInput.addEventListener("change", () => {
-    diffHost.classList.toggle("hidden", !showDiffInput.checked);
-    if (showDiffInput.checked) renderDiff();
+  diffToggle.addEventListener("click", () => {
+    const on = getToggle(diffToggle);
+    diffHost.classList.toggle("hidden", !on);
+    if (on) renderDiff();
   });
 
   function applyJob(job: JobDetail): void {
     currentJob = job;
-    statusHost.replaceChildren(badge(job.status, job.status === "failed" ? "error" : "accent"));
-    progressFill.style.width = `${Math.min(100, Math.max(0, job.progress_percent))}%`;
-    if (job.status === "completed") {
-      statusHost.textContent += ` · ${job.provider_id ?? "provider"} · chunks ${job.completed_chunks}/${job.total_chunks}`;
-    }
+    clear(statusHost);
+    statusHost.append(statusBadge(job.status));
+    const pct = Math.min(100, Math.max(0, job.progress_percent));
+    progressFill.style.width = `${pct}%`;
+    progressPct.textContent = `${pct}%`;
+    progressText.textContent = job.status === "completed"
+      ? `Completed · ${job.completed_chunks}/${job.total_chunks} chunks`
+      : `${job.status.charAt(0).toUpperCase() + job.status.slice(1)} · ${job.completed_chunks}/${job.total_chunks} chunks`;
+    progressWrap.classList.toggle("hidden", !["queued", "running", "paused", "completed", "failed", "cancelled"].includes(job.status));
+
     errorNote.classList.toggle("hidden", !job.error);
     errorNote.textContent = job.error ?? "";
-    const hasOutput = Boolean(job.output_text);
-    if (hasOutput && outputArea.value !== (job.output_text ?? "")) outputArea.value = job.output_text ?? "";
-    for (const control of [copyBtn, useAsInputBtn, txtBtn, docxBtn]) control.disabled = !hasOutput;
+
+    const hasOutput = Boolean(job.output_text && job.output_text.length > 0);
+    if (hasOutput && output.value !== (job.output_text ?? "")) {
+      output.value = job.output_text ?? "";
+      syncRight();
+      if (getToggle(diffToggle)) renderDiff();
+    }
+    setOutputControls(hasOutput);
     retryBtn.classList.toggle("hidden", job.status !== "failed");
-    cancelBtn.classList.toggle("hidden", ["queued", "running", "paused"].includes(job.status));
+    cancelBtn.classList.toggle("hidden", !["queued", "running", "paused"].includes(job.status));
   }
 
   async function poll(jobId: number): Promise<void> {
@@ -278,51 +225,59 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
       const job = await api.job(jobId);
       if (!root.isConnected) return;
       applyJob(job);
-      if (["queued", "running", "paused"].includes(job.status)) {
-        window.setTimeout(() => void poll(jobId), POLL_MS);
-      }
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
+      if (["queued", "running", "paused"].includes(job.status)) window.setTimeout(() => void poll(jobId), POLL_MS);
+      else if (job.status === "completed") toast("Rewrite complete.", "success");
+    } catch (err) { toast(errorMessage(err), "error"); }
   }
 
-  // Behaviour
+  async function submitJob(): Promise<void> {
+    const text = original.value.trim();
+    if (!text) { toast("Paste some text to humanize first.", "error"); original.focus(); return; }
+    setButtonLoading(startBtn, true, "Humanizing...");
+    progressWrap.classList.remove("hidden");
+    progressFill.style.width = "0%"; progressPct.textContent = "0%"; progressText.textContent = "Starting...";
+    clear(statusHost); errorNote.classList.add("hidden");
+    try {
+      const created = await api.humanize({
+        text,
+        mode: modeSel.value,
+        intensity: intensitySel.value,
+        provider_id: providerSel.value || undefined,
+        preserve_formatting: getToggle(preserveToggle),
+        keep_quotes: getToggle(preserveToggle),
+      });
+      currentJob = null; output.value = ""; syncRight(); setOutputControls(false);
+      await poll(created.job_id);
+    } catch (err) { toast(errorMessage(err), "error"); }
+    finally { setButtonLoading(startBtn, false); startBtn.textContent = "Humanize"; }
+  }
+
   async function retryJob(): Promise<void> {
     if (!currentJob) return;
-    try {
-      await api.retryJob(currentJob.id);
-      toast("Retrying…", "info");
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
+    try { await api.retryJob(currentJob.id); toast("Retrying failed chunks.", "info"); void poll(currentJob.id); }
+    catch (err) { toast(errorMessage(err), "error"); }
   }
-
   async function cancelJob(): Promise<void> {
     if (!currentJob) return;
-    try {
-      await api.cancelJob(currentJob.id);
-      toast("Cancellation requested.", "info");
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
+    try { await api.cancelJob(currentJob.id); toast("Cancellation requested.", "info"); }
+    catch (err) { toast(errorMessage(err), "error"); }
   }
-
-  async function download(format: "txt" | "docx"): Promise<void> {
+  async function download(fmt: "txt" | "docx"): Promise<void> {
     if (!currentJob) return;
-    try {
-      await api.downloadJob(currentJob.id, format, currentJob.title);
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
+    try { await api.downloadJob(currentJob.id, fmt, currentJob.title || "phrasia"); toast(`Downloaded .${fmt} file.`, "success"); }
+    catch (err) { toast(errorMessage(err), "error"); }
   }
-
-  async function copy(text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast("Copied to clipboard.", "success");
-    } catch {
-      toast("Could not copy. Select the text and copy manually.", "error");
-    }
+  async function copyOutput(): Promise<void> {
+    const t = output.value;
+    if (!t) return;
+    try { await navigator.clipboard.writeText(t); toast("Copied to clipboard.", "success"); }
+    catch { toast("Could not copy automatically. Select and copy manually.", "error"); }
   }
-
+  function useAsInput(): void {
+    const t = output.value.trim();
+    if (!t) return;
+    original.value = t; setDraft(t); syncLeft();
+    toast("Rewritten text moved to input.", "success");
+    original.focus();
+  }
 }

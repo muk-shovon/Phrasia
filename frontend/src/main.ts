@@ -1,4 +1,4 @@
-import "./style.css";
+﻿import "./style.css";
 
 import { ICONS, el } from "./ui";
 import { renderDetector } from "./pages/detector";
@@ -13,139 +13,113 @@ interface Route {
   hash: string;
   label: string;
   helper: string;
+  icon: string;
   page: Page;
-  mobileIcon?: string;
 }
 
 const ROUTES: Route[] = [
-  {
-    hash: "#/humanize",
-    label: "Humanize",
-    helper: "Rewrite and refine text with an external model",
-    page: renderHumanize,
-    mobileIcon: ICONS.humanize,
-  },
-  {
-    hash: "#/plagiarism",
-    label: "Similarity",
-    helper: "Local reference library check + web search",
-    page: renderPlagiarism,
-    mobileIcon: ICONS.plagiarism,
-  },
-  {
-    hash: "#/detector",
-    label: "Style signal",
-    helper: "Local style analysis of your writing",
-    page: renderDetector,
-    mobileIcon: ICONS.detector,
-  },
-  {
-    hash: "#/history",
-    label: "History",
-    helper: "Your documents and versions",
-    page: renderHistory,
-    mobileIcon: ICONS.history,
-  },
-  {
-    hash: "#/settings",
-    label: "Settings",
-    helper: "Providers, keys and app info",
-    page: renderSettings,
-    mobileIcon: ICONS.settings,
-  },
+  { hash: "#/humanize",   label: "Humanize",        helper: "Rewrite and refine",   icon: ICONS.humanize,   page: renderHumanize },
+  { hash: "#/plagiarism", label: "Similarity Check", helper: "Local and web checks", icon: ICONS.plagiarism, page: renderPlagiarism },
+  { hash: "#/detector",   label: "Style Signal",    helper: "Named writing signals", icon: ICONS.detector,   page: renderDetector },
+  { hash: "#/history",    label: "History",         helper: "Documents and jobs",   icon: ICONS.history,    page: renderHistory },
+  { hash: "#/settings",   label: "Settings",        helper: "Providers and preferences", icon: ICONS.settings, page: renderSettings },
 ];
 
 const DEFAULT_HASH = "#/humanize";
+const COLLAPSE_KEY = "phrasia:sidebar-collapsed";
 
-const routeFor = (hash: string): Route =>
-  ROUTES.find((route) => route.hash === hash) ?? ROUTES[0]!;
+const routeFor = (hash: string): Route => ROUTES.find((r) => r.hash === hash) ?? ROUTES[0]!;
+const isCollapsed = (): boolean => { try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; } };
+const setCollapsed = (v: boolean): void => { try { localStorage.setItem(COLLAPSE_KEY, v ? "1" : "0"); } catch { /* ignore */ } };
 
-function routeTitle(hash: string): string {
-  const route = routeFor(hash);
-  return hash === "#/settings" ? "Settings" : route.label;
+function closeMobileDrawer(): void {
+  document.getElementById("mobile-drawer")?.classList.remove("open");
+  document.getElementById("mobile-drawer-backdrop")?.classList.remove("open");
+  document.getElementById("mobile-menu-btn")?.setAttribute("aria-expanded", "false");
+  document.getElementById("mobile-drawer")?.setAttribute("aria-hidden", "true");
+}
+function openMobileDrawer(): void {
+  document.getElementById("mobile-drawer")?.classList.add("open");
+  document.getElementById("mobile-drawer-backdrop")?.classList.add("open");
+  document.getElementById("mobile-menu-btn")?.setAttribute("aria-expanded", "true");
+  document.getElementById("mobile-drawer")?.setAttribute("aria-hidden", "false");
+  (document.getElementById("mobile-drawer-close") as HTMLButtonElement | null)?.focus();
 }
 
-// ---------------------------------------------------------------------------
-// Sidebar (desktop)
-// ---------------------------------------------------------------------------
+function navItem(route: Route, activeHash: string, onNavigate?: () => void): HTMLAnchorElement {
+  const active = route.hash === activeHash;
+  const a = el("a", `nav-item${active ? " active" : ""}`) as HTMLAnchorElement;
+  a.href = route.hash;
+  a.dataset.tooltip = route.label;
+  if (active) a.setAttribute("aria-current", "page");
+  const iconWrap = el("span", "inline-flex shrink-0");
+  iconWrap.innerHTML = route.icon;
+  const labelWrap = el("span", "nav-label-wrap min-w-0 flex-1");
+  labelWrap.append(el("span", "nav-label block", route.label));
+  labelWrap.append(el("span", "nav-desc", route.helper));
+  a.append(iconWrap, labelWrap);
+  a.addEventListener("click", () => { onNavigate?.(); });
+  return a;
+}
+
 function buildSidebar(activeHash: string): void {
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
   sidebar.replaceChildren();
+  const collapsed = isCollapsed();
+  sidebar.classList.toggle("collapsed", collapsed);
 
-  const shell = el("div", "flex h-full flex-col");
-  const brand = el("div", "border-b border-[#223222] px-6 py-6");
-  brand.append(
-    el("span", "font-serif text-2xl tracking-tight text-[#E7EDE6]", "Phrasia"),
-    el("span", "mt-1 block text-[11px] uppercase tracking-[0.22em] text-[#8FA795]", "Words, Refined."),
-  );
-  shell.append(brand);
+  // Brand
+  const brand = el("div", "sidebar-brand");
+  const mark = el("div", "sidebar-brand-mark", "P");
+  mark.setAttribute("aria-hidden", "true");
+  const brandText = el("div", "sidebar-brand-text");
+  brandText.append(el("div", "sidebar-brand-name", "Phrasia"), el("div", "sidebar-brand-tag", "Words, Refined."));
+  brand.append(mark, brandText);
+  sidebar.append(brand);
 
-  const nav = el("nav", "flex flex-1 flex-col gap-1 px-3 py-4");
-  for (const route of ROUTES) {
-    const isActive = route.hash === activeHash;
-    const link = el(
-      "a",
-      `flex items-center gap-3 rounded-lg px-3 py-2.5 transition ${
-        isActive
-          ? "bg-[#25422F] text-white"
-          : "text-[#B6C3AC] hover:bg-[#1E3224] hover:text-white"
-      }`,
-    );
-    link.href = route.hash;
-    link.innerHTML = route.mobileIcon ?? "";
-    const labelBox = el("span", "min-w-0 flex-1", route.label);
-    if (!isActive) labelBox.classList.add("hidden", "md:block");
-    link.append(labelBox, el("span", `hidden text-[11px] text-[#A9B7AE] md:${isActive ? "text-white" : "block"}`, route.helper));
-    nav.append(link);
-  }
-  shell.append(nav);
+  // Nav
+  const nav = el("nav", "sidebar-nav");
+  nav.setAttribute("aria-label", "Primary");
+  for (const route of ROUTES) nav.append(navItem(route, activeHash));
+  sidebar.append(nav);
 
-  const footer = el("div", "border-t border-[#223222] px-6 py-4");
-  footer.append(
-    el("p", "text-[12px] leading-5 text-[#8FA795]", "Local, private, single-owner."),
-    el("p", "mt-1 text-[12px] leading-5 text-[#8FA795]", "Powered by your choice of free, anonymous LLM APIs."),
-  );
-  shell.append(footer);
+  // Collapse toggle
+  const toggle = el("button", "sidebar-toggle");
+  toggle.type = "button";
+  toggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  toggle.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
+  toggle.innerHTML = collapsed ? ICONS.expand : ICONS.collapse;
+  toggle.addEventListener("click", () => {
+    const next = !isCollapsed();
+    setCollapsed(next);
+    buildSidebar(window.location.hash || DEFAULT_HASH);
+  });
+  sidebar.append(toggle);
 
-  sidebar.append(shell);
+  // Footer
+  const footer = el("div", "sidebar-footer");
+  footer.append(el("div", "", "Local, private, single-owner."));
+  footer.append(el("div", "mt-1 text-[#88994f]/80", "Your writing stays on this machine."));
+  sidebar.append(footer);
 }
 
-// ---------------------------------------------------------------------------
-// Mobile tab bar (bottom on small screens)
-// ---------------------------------------------------------------------------
-function buildMobileTabs(activeHash: string): void {
-  const root = document.getElementById("mobile-tabs");
-  if (!root) return;
-  root.replaceChildren();
-  const tabs = ROUTES;
-  for (const route of tabs) {
-    const isActive = route.hash === activeHash;
-    const link = el(
-      "a",
-      `flex min-w-0 flex-1 flex-col items-center gap-0.5 px-1 py-2 transition ${
-        isActive ? "text-[#1F6B4A]" : "text-[#5C6C62]"
-      }`,
-    );
-    link.href = route.hash;
-    link.append(el("span", "", route.mobileIcon), el("span", "mt-0.5 text-[10px] font-medium", route.label));
-    root.append(link);
-  }
+function buildMobileDrawer(activeHash: string): void {
+  const nav = document.getElementById("mobile-drawer-nav");
+  if (!nav) return;
+  nav.replaceChildren();
+  for (const route of ROUTES) nav.append(navItem(route, activeHash, closeMobileDrawer));
 }
 
-// ---------------------------------------------------------------------------
-// Routing
-// ---------------------------------------------------------------------------
 async function navigate(): Promise<void> {
   const hash = window.location.hash || DEFAULT_HASH;
   const route = routeFor(hash);
-  if (hash !== route.hash) {
-    window.location.hash = route.hash;
-    return;
-  }
-  document.title = `${routeTitle(hash)} · Phrasia`;
+  if (hash !== route.hash) { window.location.hash = route.hash; return; }
+
+  document.title = `${route.label} · Phrasia`;
   buildSidebar(route.hash);
-  buildMobileTabs(route.hash);
+  buildMobileDrawer(route.hash);
+  closeMobileDrawer();
 
   const view = document.getElementById("view");
   if (!view) return;
@@ -154,11 +128,17 @@ async function navigate(): Promise<void> {
     await route.page(view);
   } catch (error) {
     view.append(
-      el("h1", "text-xl font-semibold", "Something went wrong"),
-      el("p", "mt-2 text-base leading-6 text-[#8B2020]", error instanceof Error ? error.message : String(error)),
+      el("h1", "page-title", "Something went wrong"),
+      el("p", "mt-3 text-[var(--color-danger)]", error instanceof Error ? error.message : String(error)),
     );
   }
 }
+
+// Mobile drawer wiring
+document.getElementById("mobile-menu-btn")?.addEventListener("click", openMobileDrawer);
+document.getElementById("mobile-drawer-close")?.addEventListener("click", closeMobileDrawer);
+document.getElementById("mobile-drawer-backdrop")?.addEventListener("click", closeMobileDrawer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeMobileDrawer(); });
 
 window.addEventListener("hashchange", () => void navigate());
 if (!window.location.hash) {

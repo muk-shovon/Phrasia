@@ -1,4 +1,4 @@
-# Decision Log - Phrasia
+﻿# Decision Log - Phrasia
 
 Short, honest decisions. Overengineering without value was removed.
 
@@ -32,3 +32,7 @@ Short, honest decisions. Overengineering without value was removed.
 
 ## D-008: run.py is the one command
 - `python run.py`: auto-runs `npm install` + `npm run build` if `frontend/dist` is missing (npm.cmd for Windows), starts uvicorn on 127.0.0.1:8000.
+
+## UI redesign (2026)
+- Implemented a full frontend redesign using the Olive Leaf / Black Forest / Cornsilk palette, a collapsible desktop sidebar, mobile off-canvas drawer, and a shared CSS/Tailwind design system in rontend/src/style.css and rontend/src/ui.ts. All five pages (Humanize, Similarity Check, Style Signal, History, Settings) use the shared components and preserve existing API behavior.
+

@@ -1,28 +1,53 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#18200e" />
     <title>Phrasia</title>
   </head>
-  <body class="min-h-screen bg-[#F5F7F3] text-[#16251C] antialiased">
-    <div class="md:flex md:min-h-screen">
-      <aside
-        id="sidebar"
-        class="hidden md:flex md:w-64 md:shrink-0 md:flex-col bg-[#14211A] text-[#DDE4D8] md:min-h-screen"
-      ></aside>
-      <main
-        id="view"
-        class="min-w-0 flex-1 px-5 py-8 md:px-10 md:py-10"
-        aria-label="Content area"
-      ></main>
+  <body>
+    <a href="#view" class="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-md focus:bg-[var(--color-surface)] focus:px-3 focus:py-2 focus:text-[var(--color-text)]">Skip to content</a>
+
+    <!-- Mobile header -->
+    <header class="mobile-header" id="mobile-header">
+      <div class="mobile-header-brand">
+        <span class="sidebar-brand-mark" style="width:32px;height:32px;font-size:0.9rem;border-radius:8px;">P</span>
+        <span>Phrasia</span>
+      </div>
+      <button id="mobile-menu-btn" class="mobile-menu-btn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-drawer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="width:20px;height:20px"><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+      </button>
+    </header>
+
+    <!-- Mobile drawer -->
+    <div id="mobile-drawer-backdrop" class="mobile-drawer-backdrop" aria-hidden="true"></div>
+    <aside id="mobile-drawer" class="mobile-drawer" aria-label="Mobile navigation" aria-hidden="true">
+      <div class="mobile-drawer-header">
+        <div class="flex items-center gap-3">
+          <span class="sidebar-brand-mark" style="width:36px;height:36px;font-size:1rem;">P</span>
+          <div>
+            <div class="sidebar-brand-name" style="font-size:1.25rem;">Phrasia</div>
+            <div class="sidebar-brand-tag">Words, Refined.</div>
+          </div>
+        </div>
+        <button id="mobile-drawer-close" class="mobile-menu-btn" type="button" aria-label="Close menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" style="width:20px;height:20px"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <nav id="mobile-drawer-nav" class="sidebar-nav" style="padding:0.75rem;"></nav>
+      <div class="sidebar-footer">Local, private, single-owner.<br/>Your writing stays on this machine.</div>
+    </aside>
+
+    <div class="app-shell">
+      <!-- Desktop sidebar -->
+      <aside id="sidebar" class="sidebar" aria-label="Primary navigation"></aside>
+
+      <!-- Main content -->
+      <main id="view" class="main-content" tabindex="-1"></main>
     </div>
-    <nav
-      id="mobile-tabs"
-      class="hidden fixed inset-x-0 bottom-0 z-40 border-t border-[#DFE4DB] bg-white px-2 py-2 shadow-[0_-2px_10px_rgba(20,32,22,0.06)] md:hidden"
-      aria-label="Bottom navigation"
-    ></nav>
-    <div id="toast-root" class="pointer-events-none fixed right-3 top-4 z-50 flex w-80 flex-col gap-2 md:bottom-4 md:left-auto md:top-auto md:w-80" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="toast-root" class="fixed right-4 top-4 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

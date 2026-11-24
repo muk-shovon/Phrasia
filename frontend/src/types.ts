@@ -148,13 +148,6 @@ export interface DocumentDetail {
   }[];
 }
 
-export interface ExtractedText {
-  filename: string;
-  text: string;
-  word_count: number;
-  char_count: number;
-}
-
 export interface PlagiarismMatch {
   reference_id: number | null;
   title: string;

@@ -1,90 +1,108 @@
-import { api, errorMessage } from "../api";
+﻿import { api, errorMessage } from "../api";
 import type { DetectorReport } from "../types";
 import {
-  badge,
-  button,
-  card,
-  el,
-  pageHead,
-  toast,
+  badge, button, card, clear, el, emptyState, loadingState, pageHead,
+  setButtonLoading, textarea, toast, wordCount,
 } from "../ui";
 
 export async function renderDetector(root: HTMLElement): Promise<void> {
   root.replaceChildren(
-    pageHead(
-      "Style Signal",
-      "A local reading of your text: named signals and a plain-language label. No verdict, no percentage.",
-    ),
+    pageHead("Style Signal", "Understand your writing through named style signals and clear, plain-language explanations."),
   );
 
-  const columns = el("div", "grid gap-8 xl:grid-cols-2 xl:gap-8");
-  root.append(columns);
+  const workspace = el("div", "workspace-grid");
 
-  // ── left: input ────────────────────────────────────────────────────────
-  const leftPanel = card();
-  columns.append(leftPanel);
-  leftPanel.append(
-    el("h3", "text-lg font-semibold text-[#16251C]", "Text to inspect"),
-    el("div", "h-4"),
-  );
-  const textArea = el(
-    "textarea",
-    "w-full resize-y rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-3 text-base leading-7 text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15 min-h-[480px]",
-  );
-  textArea.placeholder = "Paste a passage (200–3,000 words work best).";
+  const left = card("flex flex-col min-w-0");
+  const leftHead = el("div", "flex flex-wrap items-center justify-between gap-3 mb-4");
+  leftHead.append(el("h2", "text-lg font-semibold text-[var(--color-text)]", "Text to inspect"));
+  const count = el("span", "text-xs font-medium text-[var(--color-text-subtle)]", "0 words");
+  leftHead.append(count);
+  const input = textarea("Paste a passage to analyze. For clearer signals, use 200 words or more.", 18);
+  input.classList.add("min-h-[320px]", "md:min-h-[460px]", "flex-1");
+  input.addEventListener("input", () => { count.textContent = `${wordCount(input.value).toLocaleString()} words`; });
+  const actions = el("div", "mt-5 flex flex-wrap gap-2");
   const analyzeBtn = button("Read style signals", "primary", () => void run());
-  leftPanel.append(textArea, el("div", "h-4"), analyzeBtn);
+  const clearBtn = button("Clear", "ghost", () => { input.value = ""; count.textContent = "0 words"; showEmpty(); }, { size: "sm" });
+  actions.append(analyzeBtn, clearBtn);
+  left.append(leftHead, input, actions);
+  workspace.append(left);
 
-  // ── right: signal panel ───────────────────────────────────────────────
-  const rightPanel = card();
-  columns.append(rightPanel);
-  const statusHost = el("p", "text-sm text-[#5C6C62]", "Pick a passage to start.");
-  const resultHost = el("div", "mt-5 space-y-4");
-  rightPanel.append(statusHost, resultHost);
+  const right = card("flex flex-col min-w-0");
+  right.append(el("h2", "text-lg font-semibold text-[var(--color-text)] mb-4", "Style analysis"));
+  const resultHost = el("div", "flex-1");
+  right.append(resultHost);
+  workspace.append(right);
+  root.append(workspace);
 
-  const run = async (): Promise<void> => {
-    const text = textArea.value.trim();
-    if (!text) {
-      toast("Paste some text first.", "error");
-      return;
-    }
-    statusHost.textContent = "Reading locally…";
-    analyzeBtn.disabled = true;
-    try {
-      const report: DetectorReport = await api.detect(text);
-      resultHost.replaceChildren(
-        el("div", "flex flex-wrap items-center gap-3 rounded-xl bg-[#ECF5ED] p-5"),
-      );
-      const header = resultHost.firstElementChild as HTMLElement;
-      header.append(
-        el("span", "text-2xl font-semibold text-[#16251C]", report.label),
-        badge("Local style signal", "accent"),
-      );
-      resultHost.append(
-        el("p", "mt-4 text-sm text-[#3D4B41] leading-6", report.summary),
-        el("p", "mt-3 text-sm text-[#7C8A80]", `Words: ${report.word_count} · Sentences: ${report.sentence_count}`),
-      );
-      const signalList = el("div", "mt-5 space-y-3");
-      for (const signal of report.signals) {
-        const cardEl = el("div", "rounded-lg border border-[#DDE2D6] bg-white px-4 py-3");
-        cardEl.append(
-          el("p", "text-xs font-semibold uppercase tracking-wide text-[#8C9890]", signal.name),
-          el("p", "mt-1 text-sm text-[#3D4B41]", signal.detail),
-        );
-        signalList.append(cardEl);
+  function showEmpty(): void {
+    clear(resultHost);
+    resultHost.append(emptyState("No analysis yet", "Paste text on the left and read its style signals. This is a local, descriptive analysis — not a detector verdict.", "◔"));
+  }
+  function showLoading(): void { clear(resultHost); resultHost.append(loadingState("Analyzing writing signals locally...")); }
+  function showError(msg: string): void {
+    clear(resultHost);
+    const box = el("div", "rounded-lg border border-[rgba(122,59,46,0.2)] bg-[var(--color-danger-bg)] p-4");
+    box.append(el("p", "font-semibold text-[var(--color-danger)]", "Analysis failed"));
+    box.append(el("p", "mt-1 text-sm text-[var(--color-danger)]", msg));
+    resultHost.append(box);
+  }
+
+  function signalTone(dir: string): "neutral" | "accent" | "success" | "warn" {
+    if (dir === "formulaic") return "warn";
+    if (dir === "conversational") return "success";
+    return "neutral";
+  }
+  function signalLabel(dir: string): string {
+    if (dir === "formulaic") return "Formulaic";
+    if (dir === "conversational") return "Conversational";
+    return "Neutral";
+  }
+
+  function renderReport(r: DetectorReport): void {
+    clear(resultHost);
+
+    const overview = el("div", "rounded-lg border border-[var(--color-border)] bg-[var(--color-cornsilk-600)] p-5 mb-5");
+    const head = el("div", "flex flex-wrap items-center gap-3 mb-2");
+    head.append(el("p", "text-xl font-semibold text-[var(--color-text)]", r.label));
+    head.append(badge("Local style signal", "accent"));
+    overview.append(head);
+    overview.append(el("p", "text-sm leading-6 text-[var(--color-text-muted)]", r.summary));
+    const meta = el("div", "mt-4 flex flex-wrap gap-x-5 gap-y-1 text-xs text-[var(--color-text-subtle)]");
+    meta.append(el("span", "", `${r.word_count.toLocaleString()} words`), el("span", "", `${r.sentence_count.toLocaleString()} sentences`));
+    overview.append(meta);
+    resultHost.append(overview);
+
+    resultHost.append(el("h3", "text-sm font-semibold text-[var(--color-text)] mb-3", "Identified signals"));
+    if (!r.signals.length) {
+      resultHost.append(el("p", "text-sm text-[var(--color-text-muted)]", "No notable signals reported."));
+    } else {
+      const list = el("div", "space-y-3");
+      for (const s of r.signals) {
+        const item = el("div", "rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4");
+        const row = el("div", "flex flex-wrap items-center justify-between gap-2 mb-1.5");
+        row.append(el("p", "text-sm font-semibold text-[var(--color-text)]", s.name));
+        row.append(badge(signalLabel(s.direction), signalTone(s.direction)));
+        item.append(row);
+        item.append(el("p", "text-sm leading-6 text-[var(--color-text-muted)]", s.detail));
+        list.append(item);
       }
-      resultHost.append(signalList);
-      resultHost.append(
-        el("p", "mt-5 rounded-lg border border-[#DDE2D6] bg-white px-4 py-3 text-sm text-[#7C8A80]", report.disclaimer),
-      );
-      statusHost.textContent = "";
-    } catch (error) {
-      statusHost.textContent = "";
-      toast(errorMessage(error), "error");
-    } finally {
-      analyzeBtn.disabled = false;
+      resultHost.append(list);
     }
-  };
 
-  analyzeBtn.addEventListener("click", () => void run());
+    const disclaimer = el("div", "mt-5 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3");
+    disclaimer.append(el("p", "text-xs leading-5 text-[var(--color-text-subtle)]", r.disclaimer));
+    resultHost.append(disclaimer);
+  }
+
+  async function run(): Promise<void> {
+    const text = input.value.trim();
+    if (!text) { toast("Paste text to analyze first.", "error"); input.focus(); return; }
+    setButtonLoading(analyzeBtn, true, "Analyzing...");
+    showLoading();
+    try { renderReport(await api.detect(text)); }
+    catch (err) { const msg = errorMessage(err); showError(msg); toast(msg, "error"); }
+    finally { setButtonLoading(analyzeBtn, false); analyzeBtn.textContent = "Read style signals"; }
+  }
+
+  showEmpty();
 }
