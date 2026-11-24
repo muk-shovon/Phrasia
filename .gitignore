@@ -1,4 +1,4 @@
-# Secrets and local data
+# Secrets, local data and machine state
 .env
 .env.*
 !.env.example
@@ -15,26 +15,16 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
-.coverage
-htmlcov/
-*.egg-info/
-build/
 
-# Frontend
+# Node / frontend build
 node_modules/
-dist/
 frontend/dist/
 *.tsbuildinfo
 
-# Editors and OS
+# Editors, OS and logs
 .vscode/
 .idea/
 .DS_Store
 Thumbs.db
 desktop.ini
-
-# Logs and temp files
 *.log
-logs/
-*.tmp
-*.temp
