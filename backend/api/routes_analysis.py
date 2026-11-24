@@ -12,7 +12,7 @@ from backend.api.errors import fail
 from backend.api.schemas import DiffRequest, ReferenceRequest, TextRequest
 from backend.db import repository
 from backend.core import detector, plagiarism
-from backend.core.rewrite_diff import diff_segments, style_report
+from backend.core.rewrite_diff import diff_from_alignment, diff_segments, style_report
 
 router = APIRouter(prefix="/api", tags=["analysis"], dependencies=[Depends(require_owner)])
 
@@ -74,8 +74,12 @@ async def detect_style(payload: TextRequest) -> dict[str, Any]:
 async def diff_text(payload: DiffRequest) -> dict[str, Any]:
     original = payload.original
     rewritten = payload.rewritten
-    segments = diff_segments(original, rewritten)
-    style = style_report(original, rewritten)
+    alignment = payload.alignment or None
+    if alignment:
+        segments = diff_from_alignment(alignment)
+    else:
+        segments = diff_segments(original, rewritten)
+    style = style_report(original, rewritten, alignment)
     changed = sum(1 for s in segments if s.get("type") == "changed")
     review = sum(1 for s in segments if s.get("type") == "changed" and s.get("risk") in {"meaning", "number"})
     return {

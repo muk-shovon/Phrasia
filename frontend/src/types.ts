@@ -65,6 +65,7 @@ export interface JobChunk {
   error: string | null;
   source_length: number;
   output_length: number | null;
+  mapping_json?: string | null;
 }
 
 export interface JobDetail {
@@ -227,16 +228,25 @@ export interface DiffSegment {
   original: string;
   rewritten: string;
   risk: "none" | "meaning" | "number";
+  low_change?: boolean;
+  flat_rhythm?: boolean;
+  sentence_start?: boolean;
+  sentence_end?: boolean;
 }
 
 export interface DiffStylePattern { id: string; name: string; count: number; }
 export interface DiffStyleSide { total: number; strong: number; weak: number; by_pattern: DiffStylePattern[]; }
+export interface DiffStructure { sentences_total: number; sentences_restructured: number; average_change_pct: number; }
 export interface DiffStyle {
   before: DiffStyleSide;
   after: DiffStyleSide;
   removed: number;
   remaining: DiffStylePattern[];
   changed_words_pct: number;
+  banned_words_removed: number;
+  rhythm_varied: number;
+  paragraphs_total: number;
+  structure: DiffStructure;
 }
 
 export interface DiffReport {

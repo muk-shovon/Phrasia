@@ -14,11 +14,27 @@ PATTERNS_PATH = Path(__file__).with_name("ai_patterns.json")
 
 
 @lru_cache(maxsize=1)
-def get_patterns() -> list[dict[str, Any]]:
+def _raw() -> dict[str, Any]:
     data = json.loads(PATTERNS_PATH.read_text(encoding="utf-8"))
-    if not isinstance(data, list):
+    if isinstance(data, list):
+        return {"patterns": data, "banned_words": []}
+    if isinstance(data, dict):
+        return {"patterns": data.get("patterns", []), "banned_words": data.get("banned_words", [])}
+    return {"patterns": [], "banned_words": []}
+
+
+@lru_cache(maxsize=1)
+def get_patterns() -> list[dict[str, Any]]:
+    pats = _raw().get("patterns", [])
+    return pats if isinstance(pats, list) else []
+
+
+@lru_cache(maxsize=1)
+def get_banned_words() -> list[str]:
+    words = _raw().get("banned_words", [])
+    if not isinstance(words, list):
         return []
-    return data
+    return [str(w) for w in words if str(w).strip()]
 
 
 @lru_cache(maxsize=1)

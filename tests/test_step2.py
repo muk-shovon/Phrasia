@@ -33,8 +33,23 @@ class FakeProvider:
         self.calls.append(request)
         if self.error is not None:
             raise self.error
+        text = self.text
+        if "[S1]" in request.text and "[S" not in text:
+            import re as _re
+            src_tags = _re.findall(r"\[(S\d+(?:\+S\d+)*)\]", request.text)
+            parts = [p.strip() for p in _re.split(r'(?<=[.!?])\s+', text.strip()) if p.strip()]
+            if len(parts) == len(src_tags):
+                text = "\n".join(f"[{t}] {p}" for t, p in zip(src_tags, parts))
+            elif len(parts) == 1 and len(src_tags) > 1:
+                merged = "+".join(src_tags)
+                text = f"[{merged}] {parts[0]}"
+            else:
+                if not parts: parts = [text.strip() or "..."]
+                while len(parts) < len(src_tags): parts.append(parts[-1])
+                parts = parts[:len(src_tags)]
+                text = "\n".join(f"[{t}] {p}" for t, p in zip(src_tags, parts))
         return GenerationResult(
-            text=self.text, provider_id=self.provider_id, model_id=self.model, finish_reason=self.finish
+            text=text, provider_id=self.provider_id, model_id=self.model, finish_reason=self.finish
         )
 
     async def health(self) -> tuple[bool, str]:

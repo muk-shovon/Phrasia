@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     source_text TEXT NOT NULL,
     separator TEXT NOT NULL DEFAULT '',
     output_text TEXT,
+    mapping_json TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     attempt_count INTEGER NOT NULL DEFAULT 0,
     error TEXT,
@@ -148,6 +149,11 @@ def _one(row: sqlite3.Row | None) -> dict[str, Any] | None:
 def init_db() -> None:
     with _db() as conn:
         conn.executescript(SCHEMA)
+        # lightweight migration for existing DBs
+        try:
+            conn.execute("ALTER TABLE chunks ADD COLUMN mapping_json TEXT")
+        except Exception:
+            pass
 
 
 def reset_db_for_tests() -> None:
@@ -334,7 +340,7 @@ def get_job_detail(job_id: int) -> dict[str, Any] | None:
             dict(chunk)
             for chunk in conn.execute(
                 "SELECT id, seq, status, attempt_count, error, length(source_text)"
-                " AS source_length, length(output_text) AS output_length"
+                " AS source_length, length(output_text) AS output_length, mapping_json"
                 " FROM chunks WHERE job_id = ? ORDER BY seq",
                 (job_id,),
             )
@@ -415,12 +421,13 @@ def update_chunk(
     output_text: str | None = None,
     attempt_count: int | None = None,
     error: str | None = None,
+    mapping_json: str | None = None,
 ) -> None:
     with _db() as conn:
         conn.execute(
             "UPDATE chunks SET status = ?, output_text = COALESCE(?, output_text),"
-            " attempt_count = COALESCE(?, attempt_count), error = ? WHERE id = ?",
-            (status, output_text, attempt_count, error, chunk_id),
+            " attempt_count = COALESCE(?, attempt_count), error = ?, mapping_json = COALESCE(?, mapping_json) WHERE id = ?",
+            (status, output_text, attempt_count, error, mapping_json, chunk_id),
         )
 
 

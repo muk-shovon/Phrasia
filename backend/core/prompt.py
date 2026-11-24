@@ -1,4 +1,4 @@
-"""Humanizer prompt construction. Single source of truth for modes/intensity."""
+"""Humanizer prompt construction. Single source of truth for tones/strengths."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,27 +6,31 @@ from dataclasses import dataclass
 from backend.core.ai_patterns import strong_patterns
 
 MODES: dict[str, dict[str, str]] = {
+    "casual": {"label": "Casual", "guidance": "Friendly peer voice, everyday words, natural contractions."},
+    "professional": {"label": "Professional", "guidance": "Clear, direct, polite, no corporate buzzwords."},
+    "academic": {"label": "Academic", "guidance": "Objective, active and readable, few or no contractions, no bloated filler."},
+    "marketing": {"label": "Marketing", "guidance": "Punchy and persuasive, but use ONLY benefits stated in the source."},
+    "storytelling": {"label": "Storytelling", "guidance": "Natural narrative flow, concrete detail ONLY from the source, no invented scenes or facts."},
     "balanced": {"label": "Balanced", "guidance": "Keep the author's style, but make the prose cleaner and more direct."},
     "natural": {"label": "Natural", "guidance": "Use plain, natural wording and an easy rhythm."},
     "concise": {"label": "Concise", "guidance": "Tighten the text and remove filler while keeping every fact."},
-    "professional": {"label": "Professional", "guidance": "Use clear, specific workplace prose without jargon."},
-    "academic": {"label": "Academic", "guidance": "Use precise scholarly prose; keep citations and terminology exact."},
-    "casual": {"label": "Casual", "guidance": "Use an easy, conversational register without getting sloppy."},
     "persuasive": {"label": "Persuasive", "guidance": "Lead with the point and keep evidence intact without exaggeration."},
     "narrative": {"label": "Narrative", "guidance": "Favor clear flow and concrete detail; vary sentence length."},
 }
 
 INTENSITIES: dict[str, dict[str, str]] = {
-    "light": {"label": "Light", "guidance": "Make small edits only where the text is awkward or padded."},
-    "medium": {"label": "Medium", "guidance": "Rewrite sentence by sentence where helpful, but keep structure and order."},
-    "strong": {"label": "Strong", "guidance": "Rewrite freely for clarity and flow, but never change facts or meaning."},
+    "light": {"label": "Light", "guidance": "Fix AI cliches, robotic transitions and passive voice; keep most sentence structure."},
+    "medium": {"label": "Medium", "guidance": "Restructure most sentences, varied rhythm, everyday vocabulary, same order of ideas."},
+    "heavy": {"label": "Heavy", "guidance": "Rebuild every sentence's structure. Keep paragraph count and order of ideas."},
+    "strong": {"label": "Strong", "guidance": "Rebuild every sentence's structure. Keep paragraph count and order of ideas."},
 }
 
-# Kept for backward compatibility with older imports/tests.
 FORMULAIC_BAN = (
     "Furthermore, Moreover, Additionally, In conclusion, It is important to note, "
     "delve into, tapestry, landscape, realm, testament to"
 )
+
+WORST_OFFENDERS = "delve, tapestry, crucial, pivotal, leverage, furthermore, moreover, in conclusion"
 
 
 @dataclass(frozen=True)
@@ -40,11 +44,13 @@ class HumanizeOptions:
 
 def normalise_mode(mode: str | None) -> str:
     value = (mode or "").strip().lower()
-    return value if value in MODES else "balanced"
+    return value if value in MODES else "casual"
 
 
 def normalise_intensity(intensity: str | None) -> str:
     value = (intensity or "").strip().lower()
+    if value == "strong":
+        value = "heavy"
     return value if value in INTENSITIES else "medium"
 
 
@@ -54,7 +60,7 @@ def build_system_prompt(mode: str, intensity: str, options: HumanizeOptions) -> 
     intensity_key = normalise_intensity(intensity)
 
     formatting_rule = (
-        "Preserve the paragraph and line structure."
+        "Preserve the paragraph and line structure; keep headings, lists and paragraph breaks exactly."
         if options.preserve_formatting
         else "Paragraph breaks may be adjusted slightly."
     )
@@ -64,34 +70,35 @@ def build_system_prompt(mode: str, intensity: str, options: HumanizeOptions) -> 
         else "Keep URLs, emails, code, and citations character-for-character."
     )
 
-    pattern_lines = []
-    for p in strong_patterns(10):
-        name = str(p.get("name", "")).strip()
-        hint = str(p.get("hint", "")).strip()
-        if name and hint:
-            pattern_lines.append(f"- {name}: {hint}")
+    tone_line = f"Tone ({mode_key}): {MODES[mode_key]['guidance']}"
+    strength_line = f"Strength ({intensity_key}): {INTENSITIES[intensity_key]['guidance']}"
+    contraction_rule = (
+        "Contractions are natural; fragments, one rhetorical question or one short (parenthetical) remark allowed only in casual/storytelling, max one per paragraph."
+        if mode_key in {"casual", "storytelling"}
+        else "Use contractions only where the tone allows; no fragments, rhetorical questions, or parenthetical asides unless the source has them."
+    )
 
     return "\n".join(
         [
-            "You are a careful editor. Rewrite the user's text so it reads naturally.",
+            "You are a human editor. Rewrite the text so it reads like a person wrote it.",
+            "Input sentences are tagged [S1], [S2]... Return the same tags in order. Merge [S1+S2] or split as [S4] lines when needed.",
+            tone_line,
+            strength_line,
             "",
-            "Rules:",
-            "- Keep every fact, number, name, URL, and citation unchanged.",
-            "- Do not add new claims, examples, or opinions.",
-            "- Keep hedges and modal strength exactly (may/might/can/should must not become is/must). Do not swap adjectives or nouns for different meanings (good != clear).",
-            '- Do not add Oxford commas or words like "ultimately", "moreover", "furthermore" unless the original has them.',
-            "- Vary sentence structure for real: merge two short sentences or split one long one at least once per paragraph, and keep the order of ideas.",
-            "- Avoid forced triads: if the original lists three items, keep them, but do not create new lists of three.",
-            "- State points directly; vary sentence length.",
-            "- Do not add emojis, bold, or decorative formatting.",
+            "Style:",
+            "- Plain words, active voice. Start each paragraph with its main point.",
+            "- Vary sentence length (some 3-7 words, some 16-25); never three similar-length sentences in a row.",
+            f"- {contraction_rule}",
+            "",
+            "HARD constraints:",
+            "- Keep every fact, number, name, URL, citation unchanged.",
+            "- Keep hedges and modal strength exactly (may/might/can/should/must, always/usually/often, not/no). Add no new claims.",
+            "- Keep the source's lists as they are (do not create new groups of three, do not split an existing three-item list).",
             f"- {formatting_rule}",
             f"- {quote_rule}",
-            f"- Intensity: {INTENSITIES[intensity_key]['guidance']}",
-            f"- Style: {MODES[mode_key]['guidance']}",
-            "- Return only the rewritten text in the same language.",
-            "",
-            "Avoid common AI-writing patterns:",
-            *pattern_lines,
+            '- Do not add moreover/furthermore/additionally/ultimately or Oxford commas not in the source.',
+            f"- Avoid AI words, especially: {WORST_OFFENDERS}.",
+            "- Output only the tagged sentences, no preamble, no notes.",
         ]
     ).strip()
 
@@ -99,5 +106,7 @@ def build_system_prompt(mode: str, intensity: str, options: HumanizeOptions) -> 
 def meta_payload() -> dict[str, list[dict[str, str]]]:
     return {
         "modes": [{"id": k, "label": v["label"]} for k, v in MODES.items()],
-        "intensities": [{"id": k, "label": v["label"]} for k, v in INTENSITIES.items()],
+        "intensities": [
+            {"id": k, "label": v["label"]} for k, v in INTENSITIES.items() if k != "strong"
+        ],
     }

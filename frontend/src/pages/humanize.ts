@@ -24,32 +24,61 @@ function appendText(parent: HTMLElement, text: string): void {
   parent.append(document.createTextNode(text));
 }
 
+function renderSegmentInline(parent: HTMLElement, seg: DiffSegment, showOriginal: boolean): void {
+  if (seg.type === "equal") { appendText(parent, (seg.text ?? seg.rewritten ?? "")); return; }
+  const changed = el("span", "text-indigo-600 font-medium");
+  if (seg.risk === "meaning") changed.classList.add("underline", "decoration-amber-500", "decoration-solid", "underline-offset-2");
+  if (seg.risk === "number") changed.classList.add("underline", "decoration-red-500", "decoration-solid", "underline-offset-2");
+  if (showOriginal && seg.original) {
+    const old = el("span", "text-[var(--color-text-subtle)] line-through mr-1 text-[0.85em]");
+    old.textContent = seg.original;
+    changed.append(old);
+  }
+  const neu = document.createElement("span");
+  neu.textContent = seg.rewritten || "";
+  changed.append(neu);
+  if (seg.risk === "meaning" || seg.risk === "number") {
+    const mark = el("span", seg.risk === "number" ? "text-red-600 ml-0.5" : "text-amber-600 ml-0.5", "!");
+    changed.append(mark);
+  }
+  parent.append(changed);
+}
+
 function renderHighlighted(out: HTMLElement, segments: DiffSegment[], showOriginal: boolean): void {
   clear(out);
+  const hasSentenceMarks = segments.some((s) => s.sentence_start || s.sentence_end || s.low_change !== undefined);
   const merged = mergeAdjacentChanged(segments);
-  merged.forEach((seg, idx) => {
-    const space = idx < merged.length - 1 ? " " : "";
-    if (seg.type === "equal") {
-      appendText(out, (seg.text ?? seg.rewritten ?? "") + space);
-      return;
+  if (!hasSentenceMarks) {
+    merged.forEach((seg, idx) => {
+      renderSegmentInline(out, seg, showOriginal);
+      if (idx < merged.length - 1) appendText(out, " ");
+    });
+    return;
+  }
+  // group into sentences
+  let current: DiffSegment[] = [];
+  const sentences: DiffSegment[][] = [];
+  for (const seg of merged) {
+    if ((seg as any).sentence_space) { if (current.length) { sentences.push(current); current = []; } continue; }
+    current.push(seg);
+    if (seg.sentence_end) { sentences.push(current); current = []; }
+  }
+  if (current.length) sentences.push(current);
+  sentences.forEach((group, gi) => {
+    const low = group.some((g) => g.low_change);
+    const restructured = !low && group.some((g) => g.type === "changed" || !g.low_change);
+    const wrap = el("span", restructured ? "inline border-l-2 border-[var(--color-olive-400)] bg-[rgba(96,108,56,0.04)] pl-1.5 pr-0.5 rounded-sm" : "inline");
+    group.forEach((seg, idx) => { renderSegmentInline(wrap, seg, showOriginal); if (idx < group.length - 1) appendText(wrap, " "); });
+    if (low) {
+      const marker = el("span", "ml-1 text-[10px] text-[var(--color-text-subtle)] align-middle", "unchanged structure");
+      wrap.append(marker);
     }
-    const changed = el("span", "text-indigo-600 font-medium");
-    if (seg.risk === "meaning") changed.classList.add("underline", "decoration-amber-500", "decoration-solid", "underline-offset-2");
-    if (seg.risk === "number") changed.classList.add("underline", "decoration-red-500", "decoration-solid", "underline-offset-2");
-    if (showOriginal && seg.original) {
-      const old = el("span", "text-[var(--color-text-subtle)] line-through mr-1 text-[0.85em]");
-      old.textContent = seg.original;
-      changed.append(old);
+    if (group.some((g) => g.flat_rhythm)) {
+      const marker = el("span", "ml-1 text-[10px] text-[var(--color-text-subtle)] align-middle", "flat rhythm");
+      wrap.append(marker);
     }
-    const neu = document.createElement("span");
-    neu.textContent = seg.rewritten || "";
-    changed.append(neu);
-    if (seg.risk === "meaning" || seg.risk === "number") {
-      const mark = el("span", seg.risk === "number" ? "text-red-600 ml-0.5" : "text-amber-600 ml-0.5", "!");
-      changed.append(mark);
-    }
-    out.append(changed);
-    if (space) appendText(out, space);
+    out.append(wrap);
+    if (gi < sentences.length - 1) appendText(out, " ");
   });
 }
 
@@ -142,7 +171,8 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
   retryBtn.classList.add("hidden"); cancelBtn.classList.add("hidden");
   for (const b of [copyBtn, useBtn, txtBtn, docxBtn]) b.disabled = true;
   actions.append(startBtn, copyBtn, useBtn, txtBtn, docxBtn, retryBtn, cancelBtn);
-  right.append(actions);
+  const modelInfo = el("p", "mt-2 text-xs text-[var(--color-text-subtle)] hidden");
+  right.append(actions, modelInfo);
 
   const togglesRow = el("div", "mt-3 flex flex-wrap gap-x-5 gap-y-2");
   const hlRow = el("div", "flex items-center gap-2"); const hlToggle = toggle(true, "Highlight changes");
@@ -184,7 +214,7 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     if (!report) { styleHost.append(el("p", "text-sm text-[var(--color-text-muted)]", "Run Humanize to see style pattern changes.")); return; }
     const s = report.style;
     const top = el("div", "flex flex-wrap items-center gap-3 mb-3");
-    top.append(el("p", "text-sm font-semibold text-[var(--color-text)]", `AI-writing tells: ${s.before.total} ? ${s.after.total}`));
+    top.append(el("p", "text-sm font-semibold text-[var(--color-text)]", `AI-writing tells: ${s.before.total} - ${s.after.total}`));
     const bar = el("div", "flex h-2 w-40 overflow-hidden rounded-full bg-[var(--color-border)]");
     const b1 = el("div", "h-full bg-[#8a6a12]"); b1.style.width = `${Math.min(100, s.before.total * 10)}%`;
     const b2 = el("div", "h-full bg-[var(--color-forest-600)] -ml-px"); b2.style.width = `${Math.min(100, s.after.total * 10)}%`;
@@ -193,7 +223,13 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     const still = s.remaining.length ? s.remaining.map((p) => p.name).join(", ") : "None";
     styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `Still present: ${still}`));
     styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `${report.changed} changes, ${report.review} to review (!)`));
-    styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-3", `Words changed: ${s.changed_words_pct}%`));
+    styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `Words changed: ${s.changed_words_pct}%`));
+    if (s.structure && s.structure.sentences_total > 0) {
+      styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `Sentences restructured: ${s.structure.sentences_restructured} of ${s.structure.sentences_total}`));
+      styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `Average change per sentence: ${s.structure.average_change_pct}%`));
+    }
+    styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-1", `Banned words removed: ${s.banned_words_removed ?? 0}`));
+    styleHost.append(el("p", "text-sm text-[var(--color-text-muted)] mb-3", `Rhythm varied: ${s.rhythm_varied ?? 0} of ${s.paragraphs_total ?? 0} paragraphs`));
     styleHost.append(el("p", "text-xs text-[var(--color-text-subtle)] border-t border-[var(--color-border)] pt-3", "Style check on our own pattern list. Not an AI-detector result and not proof of authorship."));
   }
 
@@ -207,11 +243,22 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
   hlToggle.addEventListener("click", () => { setTimeout(renderOutput, 0); });
   origToggle.addEventListener("click", () => { setTimeout(renderOutput, 0); });
 
+  function jobAlignment(): unknown[] | undefined {
+    if (!currentJob) return undefined;
+    const pairs: unknown[] = [];
+    for (const ch of currentJob.chunks || []) {
+      const mj = (ch as any).mapping_json;
+      if (!mj) continue;
+      try { const arr = JSON.parse(mj); if (Array.isArray(arr)) pairs.push(...arr); } catch {}
+    }
+    return pairs.length ? pairs : undefined;
+  }
+
   async function refreshDiff(): Promise<void> {
     const src = original.value.trim();
     if (!src || !plainOutput.trim()) { currentDiff = null; renderStyle(null); renderOutput(); return; }
     try {
-      currentDiff = await api.diff(src, plainOutput);
+      currentDiff = await api.diff(src, plainOutput, jobAlignment());
       renderStyle(currentDiff);
       renderOutput();
     } catch { /* diff is optional UI; keep plain output */ }
@@ -222,7 +269,7 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     clear(statusHost); statusHost.append(statusBadge(job.status));
     const pct = Math.min(100, Math.max(0, job.progress_percent));
     progressFill.style.width = `${pct}%`; progressPct.textContent = `${pct}%`;
-    progressText.textContent = `${job.status.charAt(0).toUpperCase() + job.status.slice(1)} ? ${job.completed_chunks}/${job.total_chunks} chunks`;
+    progressText.textContent = `${job.status.charAt(0).toUpperCase() + job.status.slice(1)} - ${job.completed_chunks}/${job.total_chunks} chunks`;
     progressWrap.classList.remove("hidden");
     errorNote.classList.toggle("hidden", !job.error); errorNote.textContent = job.error ?? "";
     const has = Boolean(job.output_text && job.output_text.length > 0);
@@ -230,6 +277,20 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     setOutputControls(has);
     retryBtn.classList.toggle("hidden", job.status !== "failed");
     cancelBtn.classList.toggle("hidden", !["queued", "running", "paused"].includes(job.status));
+    const attempts = (job.chunks || []).reduce((a, c) => a + (c.attempt_count || 0), 0);
+    let low = 0;
+    for (const ch of job.chunks || []) {
+      const mj = (ch as any).mapping_json;
+      if (!mj) continue;
+      try { const arr = JSON.parse(mj); for (const m of arr) if (m.low_change) low += Math.max(1, (m.source_indices || []).length); } catch {}
+    }
+    const model = [job.provider_id, job.model_id].filter(Boolean).join("/");
+    if (model || attempts || job.status === "completed" || job.status === "failed") {
+      modelInfo.textContent = `Model: ${model || "unknown"} - attempts: ${attempts} - low-change sentences: ${low}`;
+      modelInfo.classList.remove("hidden");
+    } else {
+      modelInfo.classList.add("hidden");
+    }
   }
 
   async function poll(jobId: number): Promise<void> {

@@ -17,7 +17,7 @@ from backend.core.prompt import (
 @pytest.mark.parametrize("mode", sorted(MODES))
 def test_every_mode_is_named_in_the_prompt(mode: str) -> None:
     prompt = build_system_prompt(mode, "medium", HumanizeOptions())
-    assert "Return only the rewritten text" in prompt
+    assert "Output only the tagged sentences" in prompt
     assert MODES[mode]["guidance"] in prompt
 
 
@@ -45,11 +45,11 @@ def test_formatting_rule_changes_with_the_flag() -> None:
 
 
 def test_unknown_values_fall_back_to_defaults() -> None:
-    assert normalise_mode("nonsense") == "balanced"
+    assert normalise_mode("nonsense") == "casual"
     assert normalise_intensity("extreme") == "medium"
 
 
 def test_meta_payload_lists_every_option() -> None:
     payload = meta_payload()
     assert [item["id"] for item in payload["modes"]] == list(MODES)
-    assert [item["id"] for item in payload["intensities"]] == list(INTENSITIES)
+    assert [item["id"] for item in payload["intensities"]] == ["light", "medium", "heavy"]

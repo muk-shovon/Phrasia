@@ -42,3 +42,4 @@ class PreferencesUpdate(BaseModel):
 class DiffRequest(BaseModel):
     original: str = Field(min_length=1, max_length=MAX_INPUT_CHARS)
     rewritten: str = Field(default="", max_length=MAX_INPUT_CHARS)
+    alignment: list[dict] | None = None

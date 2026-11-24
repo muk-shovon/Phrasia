@@ -142,8 +142,8 @@ export const api = {
     request<PlagiarismReport>("/api/plagiarism/check", json("POST", { text })),
   detect: (text: string) =>
     request<DetectorReport>("/api/detector/check", json("POST", { text })),
-  diff: (original: string, rewritten: string) =>
-    request<DiffReport>("/api/diff", json("POST", { original, rewritten })),
+  diff: (original: string, rewritten: string, alignment?: unknown[]) =>
+    request<DiffReport>("/api/diff", json("POST", { original, rewritten, alignment })),
 
 
 
