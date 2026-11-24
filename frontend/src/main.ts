@@ -69,22 +69,13 @@ function buildSidebar(activeHash: string): void {
   const collapsed = isCollapsed();
   sidebar.classList.toggle("collapsed", collapsed);
 
-  // Brand
+  // Brand + collapse toggle
   const brand = el("div", "sidebar-brand");
   const mark = el("div", "sidebar-brand-mark", "P");
   mark.setAttribute("aria-hidden", "true");
   const brandText = el("div", "sidebar-brand-text");
   brandText.append(el("div", "sidebar-brand-name", "Phrasia"), el("div", "sidebar-brand-tag", "Words, Refined."));
-  brand.append(mark, brandText);
-  sidebar.append(brand);
 
-  // Nav
-  const nav = el("nav", "sidebar-nav");
-  nav.setAttribute("aria-label", "Primary");
-  for (const route of ROUTES) nav.append(navItem(route, activeHash));
-  sidebar.append(nav);
-
-  // Collapse toggle
   const toggle = el("button", "sidebar-toggle");
   toggle.type = "button";
   toggle.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
@@ -95,7 +86,17 @@ function buildSidebar(activeHash: string): void {
     setCollapsed(next);
     buildSidebar(window.location.hash || DEFAULT_HASH);
   });
-  sidebar.append(toggle);
+
+  const brandLeft = el("div", "flex items-center gap-3 min-w-0");
+  brandLeft.append(mark, brandText);
+  brand.append(brandLeft, toggle);
+  sidebar.append(brand);
+
+  // Nav
+  const nav = el("nav", "sidebar-nav");
+  nav.setAttribute("aria-label", "Primary");
+  for (const route of ROUTES) nav.append(navItem(route, activeHash));
+  sidebar.append(nav);
 
   // Footer
   const footer = el("div", "sidebar-footer");
