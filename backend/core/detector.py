@@ -267,6 +267,7 @@ def analyze(text: str) -> dict[str, Any]:
 
     return {
         "label": label,
+        "label_description": "Local style signal",
         "summary": summary,
         "word_count": word_count,
         "sentence_count": len(sentences),
