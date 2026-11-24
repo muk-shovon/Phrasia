@@ -30,7 +30,7 @@ def web_check(text: str, max_results: int = 8) -> dict[str, Any]:
     if not excerpt:
         return {"available": False, "results": [], "provider": None, "error": "empty text"}
     try:
-        results = DDGS().text(excerpt, max_results=max_results) or []
+        results = DDGS(timeout=10).text(excerpt, max_results=max_results) or []
     except Exception as exc:  # network issues, empty results, etc.
         logger.warning("web similarity check failed: %s", exc)
         return {"available": False, "results": [], "provider": "ddgs", "error": str(exc)}

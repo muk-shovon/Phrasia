@@ -24,7 +24,12 @@ def _record(kind: str, text: str, result: dict[str, Any]) -> None:
 async def check_plagiarism(payload: TextRequest) -> dict[str, Any]:
     references = repository.reference_documents_with_content()
     result = plagiarism.check(payload.text, references)
-    result["web"] = await asyncio.to_thread(plagiarism.web_check, payload.text)
+    try:
+        result["web"] = await asyncio.wait_for(
+            asyncio.to_thread(plagiarism.web_check, payload.text), timeout=20.0
+        )
+    except Exception as exc:
+        result["web"] = {"available": False, "results": [], "provider": "ddgs", "error": str(exc)}
     _record("plagiarism", payload.text, result)
     return result
 
