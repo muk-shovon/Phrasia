@@ -40,11 +40,13 @@ def validate_base_url(value: str) -> str:
         address = ipaddress.ip_address(host)
     except ValueError:
         return candidate.rstrip("/")
+    shared = ipaddress.ip_network("100.64.0.0/10")
     if (
         address.is_private
         or address.is_loopback
         or address.is_link_local
         or address.is_reserved
+        or (isinstance(address, ipaddress.IPv4Address) and address in shared)
     ):
         raise UnsafeEndpoint("Base URL must be a public online endpoint.")
     return candidate.rstrip("/")
