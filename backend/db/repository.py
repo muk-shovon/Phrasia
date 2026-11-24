@@ -93,6 +93,16 @@ CREATE TABLE IF NOT EXISTS analyses (
     result_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider_id TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    input_chars INTEGER NOT NULL DEFAULT 0,
+    output_chars INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
 """
 
 _JOB_FIELDS = {
@@ -565,3 +575,39 @@ def list_analyses(kind: str | None = None, limit: int = 20) -> list[dict[str, An
                 (kind, limit),
             ).fetchall()
         return [dict(row) for row in rows]
+
+
+def record_usage(
+    provider_id: str,
+    model_id: str,
+    operation: str,
+    input_chars: int = 0,
+    output_chars: int = 0,
+) -> None:
+    with _db() as conn:
+        conn.execute(
+            "INSERT INTO usage (provider_id, model_id, operation, input_chars,"
+            " output_chars, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (provider_id, model_id, operation, input_chars, output_chars, utcnow()),
+        )
+
+
+def list_usage(limit: int = 50) -> list[dict[str, Any]]:
+    with _db() as conn:
+        rows = conn.execute("SELECT * FROM usage ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+
+def retry_failed_chunks(job_id: int) -> int:
+    """Reset error chunks of a job back to pending so run_job retries them.
+
+    Completed chunks are left untouched, so retrying is cheap. Returns the
+    number of chunks reset.
+    """
+    with _db() as conn:
+        cur = conn.execute(
+            "UPDATE chunks SET status = 'pending', error = NULL, attempt_count = 0"
+            " WHERE job_id = ? AND status = 'error'",
+            (job_id,),
+        )
+        return int(cur.rowcount)
