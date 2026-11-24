@@ -255,6 +255,7 @@ async def run_job(
             str(job["mode"]), str(job["intensity"]), options
         )
         repository.update_job(job_id, status="running", error=None)
+        repository.retry_failed_chunks(job_id)
 
         chunks = repository.list_chunks(job_id)
         completed = sum(1 for chunk in chunks if chunk["status"] == "completed")
@@ -289,6 +290,13 @@ async def run_job(
                 output_text=result.text,
                 attempt_count=int(chunk["attempt_count"]) + attempts,
                 error=None,
+            )
+            repository.record_usage(
+                used.spec.id,
+                result.model_id or used.model,
+                "humanize_chunk",
+                len(str(chunk["source_text"] or "")),
+                len(result.text or ""),
             )
             completed += 1
             repository.update_job(

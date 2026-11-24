@@ -5,6 +5,7 @@ open internet.
 """
 from __future__ import annotations
 
+import difflib
 import re
 from collections import Counter
 from typing import Any
@@ -44,6 +45,26 @@ def _sentences(text: str) -> list[str]:
 def _clip(text: str, limit: int = 280) -> str:
     clean = " ".join(text.split())
     return clean if len(clean) <= limit else f"{clean[:limit].rstrip()}…"
+
+
+def _matched_passages(input_text: str, reference_text: str, limit: int = 3) -> list[dict[str, Any]]:
+    """Longest verbatim-ish passages the input shares with the reference."""
+    matches: list[dict[str, Any]] = []
+    ratio = difflib.SequenceMatcher(None, input_text.lower(), reference_text.lower())
+    for block in ratio.get_matching_blocks():
+        if block.size < 24 or block.size == 0:
+            continue
+        passage = _clip(input_text[block.a : block.a + block.size], 220)
+        if passage not in matches:
+            matches.append(
+                {
+                    "passage": passage,
+                    "length_chars": block.size,
+                }
+            )
+        if len(matches) >= limit:
+            break
+    return matches
 
 
 def _repeated_phrases(tokens: list[str], limit: int = 6) -> list[dict[str, Any]]:
@@ -110,6 +131,9 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
                         "overlap_words": len(shared) * SHINGLE_SIZE,
                         "excerpt": _clip(str(reference.get("content", ""))),
                         "matched_sentences": hits,
+                        "matched_passages": _matched_passages(
+                            text, str(reference.get("content", ""))
+                        ),
                     }
                 )
 
