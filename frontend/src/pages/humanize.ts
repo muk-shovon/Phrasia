@@ -4,199 +4,240 @@ import {
   badge,
   button,
   card,
-  clear,
   el,
-  input,
+  formatNumber,
   pageHead,
   setDraft,
   toast,
-  takeDraft,
   wordCount,
-  formatNumber,
-  attachFileInput,
 } from "../ui";
 
 const POLL_MS = 1200;
-const FILE_ACCEPT = ".txt,.md,.markdown,.docx";
+
+// ── word-level diff (pure TS, no library) ──────────────────────────────────
+interface DiffChunk {
+  kind: "context" | "delete" | "insert";
+  text: string;
+}
+
+function diffWords(a: string[], b: string[]): DiffChunk[] {
+  const n = a.length;
+  const m = b.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const chunks: DiffChunk[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      chunks.push({ kind: "context", text: a[i] });
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      chunks.push({ kind: "delete", text: a[i] });
+      i++;
+    } else {
+      chunks.push({ kind: "insert", text: b[j] });
+      j++;
+    }
+  }
+  while (i < n) chunks.push({ kind: "delete", text: a[i++] });
+  while (j < m) chunks.push({ kind: "insert", text: b[j++] });
+  return chunks;
+}
+
+// ── small shared helpers ───────────────────────────────────────────────────
+function select(
+  label: string,
+  options: Array<{ value: string; label: string }>,
+  value = "",
+): HTMLSelectElement {
+  const wrapper = el("div", "flex items-center gap-3");
+  wrapper.append(el("span", "w-28 shrink-0 text-sm font-semibold text-[#25352A]", label));
+  const selectEl = el(
+    "select",
+    "w-full max-w-xs rounded-lg border border-[#CFD8C7] bg-white px-3 py-2.5 text-base text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15",
+  );
+  for (const option of options) {
+    const o = el("option", "", option.label);
+    o.value = option.value;
+    selectEl.append(o);
+  }
+  if (value) selectEl.value = value;
+  wrapper.append(selectEl);
+  return selectEl;
+}
+
+function segments(value: string): string[] {
+  return value.split(/(\s+)/).filter((part) => part);
+}
+
+// ── page ───────────────────────────────────────────────────────────────────
+const TEXT_AREA_CLASS =
+  "w-full resize-y rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-3 text-base leading-7 text-[#1D3026] outline-none transition placeholder:text-[#8C9890] focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15";
 
 export async function renderHumanize(root: HTMLElement): Promise<void> {
-  clear(root);
   const [meta, settings] = await Promise.all([api.meta(), api.settings()]);
-  const configured = settings.providers.filter((p) => p.configured);
+  const configured = settings.providers.filter((provider) => provider.configured);
 
-  root.append(
+  root.replaceChildren(
     pageHead(
-      "Humanize Text",
-      "Rewrite it so it sounds like a thoughtful human: facts stay exact, quotes and code stay untouched.",
+      "Humanizer",
+      "Paste text, rewrite it, review and export. You stay in control of every step.",
     ),
   );
 
   if (configured.length === 0) {
-    const warning = card("flex gap-3 border-[#F0E7D4] bg-[#FDF6E7]");
-    warning.append(el("span", "shrink-0 mt-0.5 text-xl leading-5", "⚠"));
+    const warning = card("border-[#F0E7D4] bg-[#FDF6E7]");
     warning.append(
-      el("span", "font-semibold text-[#7D5A12]", "No provider is configured yet. Add a free anonymous endpoint in Settings, or humanize against the catalog defaults."),
+      el("h3", "text-base font-semibold text-[#7D5A12]", "No provider is configured yet."),
+      el(
+        "p",
+        "mt-2 text-sm text-[#7D5A12]",
+        "Add a free anonymous endpoint in Settings, or humanize against the catalog defaults.",
+      ),
     );
     root.append(warning, el("div", "h-6"));
   }
 
-  const layout = el("div", "grid gap-6 lg:grid-cols-2 lg:gap-8");
-  root.append(layout);
-
-  // ── input panel ───────────────────────────────────────────────────────────
-  const inputCard = card();
-  layout.append(inputCard);
-
-  const titleEl = input("Document title (optional)", { placeholder: "Untitled document" });
-  const textArea = el(
-    "textarea",
-    "w-full resize-y rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-3 text-base leading-6 text-[#1D3026] outline-none transition placeholder:text-[#8C9890] focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15 min-h-[360px]",
-    "Paste or upload text to humanize…",
+  // ── controls bar ───────────────────────────────────────────────────────
+  const controls = card();
+  const controlRow = el("div", "flex flex-wrap items-center gap-4");
+  const modeSelect = select(
+    "Mode",
+    meta.modes.map((m) => ({ value: m.id, label: m.label })),
+    "balanced",
   );
-  textArea.value = takeDraft();
-  textArea.spellcheck = true;
-
-  const counter = el("p", "text-sm text-[#5C6C62]");
-  const updateCounter = (): void => {
-    counter.textContent = `${formatNumber(wordCount(textArea.value))} words`;
-  };
-  textArea.addEventListener("input", updateCounter);
-  updateCounter();
-
-  const modeSelect = el(
-    "select",
-    "w-full rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-2.5 text-base text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15",
+  const intensitySelect = select(
+    "Tone / intensity",
+    meta.intensities.map((m) => ({ value: m.id, label: m.label })),
+    "medium",
   );
-  for (const m of meta.modes) {
-    const o = el("option", "", m.label);
-    o.value = m.id;
-    modeSelect.append(o);
-  }
-  modeSelect.value = "balanced";
-  const modeLabel = el("label", "mb-2 block text-sm font-semibold text-[#25352A]", "Mode");
-  const modeBox = el("div", "");
-  modeBox.append(modeLabel, modeSelect);
-
-  const intensitySelect = el("select", "w-full rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-2.5 text-base text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15");
-  for (const m of meta.intensities) {
-    const o = el("option", "", m.label);
-    o.value = m.id;
-    intensitySelect.append(o);
-  }
-  intensitySelect.value = "medium";
-  const intensityLabel = el("label", "mb-2 block text-sm font-semibold text-[#25352A]", "Editing strength");
-  const intensityBox = el("div", "");
-  intensityBox.append(intensityLabel, intensitySelect);
-
-  const providerSelect = el("select", "w-full rounded-lg border border-[#CFD8C7] bg-white px-3.5 py-2.5 text-base text-[#1D3026] outline-none transition focus:border-[#1F6B4A] focus:ring-2 focus:ring-[#1F6B4A]/15");
-  const autoOption = el("option", "", "Auto — catalog order");
-  autoOption.value = "";
-  providerSelect.append(autoOption);
-  for (const provider of configured) {
-    const o = el("option", "", provider.name);
-    o.value = provider.id;
-    providerSelect.append(o);
-  }
-  const providerLabel = el("label", "mb-2 block text-sm font-semibold text-[#25352A]", "Provider");
-  const providerBox = el("div", "");
-  providerBox.append(providerLabel, providerSelect);
-
-  const upload = button("Upload .txt / .docx", "secondary", () => undefined);
-  const uploadBox = el("div", "mt-6 flex items-center gap-3");
-  uploadBox.append(upload);
-  attachFileInput(upload, FILE_ACCEPT, (file: File) => {
-    void (async () => {
-      upload.textContent = "Reading…";
-      upload.disabled = true;
-      try {
-        const extracted = await api.extractFile(file);
-        textArea.value = extracted.text;
-        const titleInput = titleEl.querySelector("input");
-        if (titleInput && !titleInput.value) titleInput.value = extracted.filename;
-        updateCounter();
-        toast(`Loaded ${extracted.filename}.`, "success");
-      } catch (error) {
-        toast(errorMessage(error), "error");
-      } finally {
-        upload.textContent = "Upload .txt / .docx";
-        upload.disabled = false;
-      }
-    })();
-  });
-
-  inputCard.append(
-    el("label", "mb-2 block text-sm font-semibold text-[#25352A]", "Document title (optional)"),
-    titleEl,
-    textArea,
-    uploadBox,
-    counter,
-    modeBox,
-    intensityBox,
-    providerBox,
+  const providerSelect = select(
+    "Provider",
+    [
+      { value: "", label: "Auto — free lanes (no key)" },
+      ...configured.map((provider) => ({ value: provider.id, label: provider.name })),
+    ],
+    "",
   );
+  controlRow.append(modeSelect, intensitySelect, providerSelect);
 
-  // ── output panel ─────────────────────────────────────────────────────────
-  const outputCard = card();
-  layout.append(outputCard);
+  const preserveWrap = el("label", "flex items-center gap-3 text-sm font-medium text-[#25352A]");
+  const preserveToggle = el("input", "h-5 w-9 accent-[#1F6B4A]");
+  preserveToggle.type = "checkbox";
+  preserveToggle.checked = true;
+  preserveWrap.append(preserveToggle, el("span", "", "Preserve formatting"));
+  controlRow.append(preserveWrap);
 
-  const statusHost = el("div", "mt-2 flex items-center gap-2 text-sm font-medium text-[#1D3026]");
-  const progressTrack = el("div", "mt-3 h-1.5 w-full overflow-hidden rounded-full bg-[#E8EBE5]");
-  const progressBar = el("div", "h-full w-0 rounded-full bg-[#1F6B4A] transition-all");
-  progressTrack.append(progressBar);
-  const progressLabel = el("p", "mt-1.5 text-sm text-[#5C6C62]", "Ready when you are.");
+  controls.append(el("div", "text-sm font-semibold text-[#16251C]", "Settings"), controlRow);
+  root.append(controls);
 
-  const outputArea = el(
-    "textarea",
-    "w-full resize-y rounded-lg border border-[#E0E4DA] bg-[#FAFBF7] px-3.5 py-3 text-base leading-6 text-[#1D3026] outline-none focus:border-[#1F6B4A] min-h-[420px]",
-  );
+  // ── two-column layout ─────────────────────────────────────────────────
+  const columns = el("div", "grid gap-6 xl:grid-cols-2 xl:gap-8");
+  root.append(columns);
+
+  const leftPanel = card();
+  columns.append(leftPanel);
+  const leftTitle = el("div", "mb-3 flex items-center justify-between gap-4");
+  leftTitle.append(el("h3", "text-lg font-semibold text-[#16251C]", "Original"));
+  const wordsCounter = el("span", "text-xs text-[#5C6C62]");
+  leftTitle.append(wordsCounter);
+  const originalArea = el("textarea", `${TEXT_AREA_CLASS} min-h-[360px]`);
+  originalArea.value = takeDraft();
+  originalArea.spellcheck = true;
+  leftPanel.append(leftTitle, originalArea);
+
+  const rightPanel = card();
+  columns.append(rightPanel);
+  const rightTitle = el("div", "mb-3 flex flex-wrap items-center justify-between gap-4");
+  rightTitle.append(el("h3", "text-lg font-semibold text-[#16251C]", "Rewritten"));
+  const statusHost = el("span", "text-sm font-medium text-[#5C6C62]");
+  rightTitle.append(statusHost);
+  const progressTrack = el("div", "ml-auto h-1.5 w-full max-w-48 overflow-hidden rounded-full bg-[#E8EBE5] md:max-w-40");
+  const progressFill = el("div", "h-full w-0 rounded-full bg-[#1F6B4A] transition-all");
+  progressTrack.append(progressFill);
+  rightTitle.append(progressTrack);
+
+  const outputArea = el("textarea", `${TEXT_AREA_CLASS} min-h-[420px] bg-white text-[#3D4B41]`);
   outputArea.readOnly = true;
   outputArea.placeholder = "Your rewritten text appears here when the job finishes.";
 
   const errorNote = el("p", "mt-3 hidden text-sm leading-6 text-[#8B2020]");
 
-  const copy = button("Copy", "secondary", () => void copyText(outputArea.value), { disabled: true });
-  const txt = button("Download .txt", "secondary", () => void download("txt"), { disabled: true });
-  const docx = button("Download .docx", "secondary", () => void download("docx"), { disabled: true });
-  const retry = button("Retry failed chunks", "secondary", () => void retryJob(), { disabled: true });
-  const cancel = button("Cancel job", "danger", () => void cancelJob(), { disabled: true });
-  const startBtn = button("Humanize text", "primary", () => void submitJob());
-  const toDetector = button("Open style signal", "ghost", () => {
-    setDraft(outputArea.value);
-    window.location.hash = "#/detector";
-  });
-  const toSimilarity = button("Check similarity", "ghost", () => {
-    setDraft(outputArea.value);
-    window.location.hash = "#/plagiarism";
-  });
+  const copyBtn = button("Copy", "secondary", () => void copy(outputArea.value), { disabled: true });
+  const useAsInputBtn = button("Use as input", "primary", () => useAsInput(), { disabled: true });
+  const retryBtn = button("Retry failed chunks", "secondary", () => void retryJob(), { disabled: true, className: "hidden" });
+  const cancelBtn = button("Cancel", "danger", () => void cancelJob(), { disabled: true, className: "hidden" });
 
-  const toolbar = el("div", "mt-5 flex flex-wrap items-center gap-2");
-  toolbar.append(startBtn, copy, txt, docx, retry, cancel, toDetector, toSimilarity);
-  outputCard.append(statusHost, progressTrack, progressLabel, outputArea, errorNote, toolbar);
+  const showDiffToggle = el("label", "mt-4 flex items-center gap-3 text-sm font-medium text-[#25352A]");
+  const showDiffInput = el("input", "h-5 w-9 accent-[#1F6B4A]");
+  showDiffInput.type = "checkbox";
+  showDiffInput.checked = false;
+  showDiffToggle.append(showDiffInput, el("span", "", "Show changes"));
 
-  // ── behaviour ─────────────────────────────────────────────────────────────
+  const diffHost = el("div", "mt-4 hidden space-y-3 rounded-xl bg-[#F5F7F3] p-5");
+  const diffOriginal = el("p", "text-sm text-[#3D4B41]");
+  const diffOutput = el("p", "text-sm text-[#1B5E3B]");
+  diffHost.append(diffOriginal, el("div", "h-3"), diffOutput);
+
+  rightPanel.append(rightTitle, outputArea, errorNote,
+    el("div", "mt-5 flex flex-wrap items-center gap-2", [copyBtn, useAsInputBtn, retryBtn, cancelBtn]),
+    showDiffToggle,
+    diffHost,
+  );
+
+  // ── behaviour ─────────────────────────────────────────────────────────
   let currentJob: JobDetail | null = null;
 
-  function setProgress(pct: number): void {
-    progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+  const wordCountUpdater = (): void => {
+    wordsCounter.textContent = `${formatNumber(wordCount(originalArea.value))} words`;
+  };
+  originalArea.addEventListener("input", wordCountUpdater);
+  wordCountUpdater();
+
+  function currentText(): string {
+    return originalArea.value.trim();
   }
+
+  function renderDiff(): void {
+    const chunks = diffWords(segments(currentText()), segments(outputArea.value));
+    diffOriginal.replaceChildren(
+      ...chunks.map((chunk) => {
+        if (chunk.kind === "delete") return el("del", "text-[#B31F1F] decoration-solid line-through", chunk.text);
+        if (chunk.kind === "insert") return el("ins", "bg-[#E4F1E8] text-[#1B5E3B]", chunk.text);
+        return el("span", "", chunk.text);
+      }),
+    );
+    diffOutput.replaceChildren(
+      ...chunks.map((chunk) => (chunk.kind === "insert" ? el("span", "font-medium text-[#1B5E3B]", chunk.text) : el("span", "", chunk.text))),
+    );
+  }
+
+  showDiffInput.addEventListener("change", () => {
+    diffHost.classList.toggle("hidden", !showDiffInput.checked);
+    if (showDiffInput.checked) renderDiff();
+  });
 
   function applyJob(job: JobDetail): void {
     currentJob = job;
     statusHost.replaceChildren(badge(job.status, job.status === "failed" ? "error" : "accent"));
-    setProgress(job.progress_percent);
-    const finished = job.status === "completed";
-    progressLabel.textContent = finished
-      ? `Complete — ${job.provider_id ?? "provider"} · ${job.model_id ?? "model"} · chunks ${job.completed_chunks}/${job.total_chunks}`
-      : job.status === "failed"
-        ? job.error || "Failed."
-        : job.status === "cancelled"
-          ? "Cancelled."
-          : `Working… ${job.progress_percent}%`;
+    progressFill.style.width = `${Math.min(100, Math.max(0, job.progress_percent))}%`;
+    if (job.status === "completed") {
+      statusHost.textContent += ` · ${job.provider_id ?? "provider"} · chunks ${job.completed_chunks}/${job.total_chunks}`;
+    }
     errorNote.classList.toggle("hidden", !job.error);
     errorNote.textContent = job.error ?? "";
     const hasOutput = Boolean(job.output_text);
-    for (const control of [copy, txt, docx, toDetector, toSimilarity]) control.disabled = !hasOutput;
     if (hasOutput && outputArea.value !== (job.output_text ?? "")) outputArea.value = job.output_text ?? "";
+    if (hasOutput) diffHost.classList.remove("hidden");
+    for (const control of [copyBtn, useAsInputBtn]) control.disabled = !hasOutput;
+    retryBtn.classList.toggle("hidden", job.status !== "failed");
+    cancelBtn.classList.toggle("hidden", ["queued", "running", "paused"].includes(job.status));
   }
 
   async function poll(jobId: number): Promise<void> {
@@ -214,33 +255,49 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
   }
 
   async function submitJob(): Promise<void> {
-    const text = textArea.value.trim();
+    const text = currentText();
     if (!text) {
       toast("There is no text to humanize.", "error");
       return;
     }
     startBtn.disabled = true;
-    startBtn.textContent = "Starting…";
     try {
       const created = await api.humanize({
         text,
-        title: titleEl.querySelector("input")?.value || undefined,
-        mode: modeSelect.value || "balanced",
-        intensity: intensitySelect.value || "medium",
+        mode: modeSelect.value,
+        intensity: intensitySelect.value,
         provider_id: providerSelect.value || undefined,
-        preserve_formatting: true,
-        keep_quotes: true,
+        preserve_formatting: preserveToggle.checked,
       });
       currentJob = null;
       outputArea.value = "";
-      errorNote.classList.add("hidden");
-      setProgress(0);
+      progressFill.style.width = "0%";
+      statusHost.textContent = "queued";
       await poll(created.job_id);
     } catch (error) {
       toast(errorMessage(error), "error");
     } finally {
       startBtn.disabled = false;
-      startBtn.textContent = "Humanize text";
+      startBtn.textContent = "Humanize";
+    }
+  }
+
+  const startBtn = button("Humanize", "primary", () => void submitJob());
+
+  function useAsInput(): void {
+    const text = outputArea.value.trim();
+    if (!text) return;
+    originalArea.value = text;
+    toast("Applied output as the new input.", "success");
+  }
+
+  async function retryJob(): Promise<void> {
+    if (!currentJob) return;
+    try {
+      await api.retryJob(currentJob.id);
+      toast("Retrying…", "info");
+    } catch (error) {
+      toast(errorMessage(error), "error");
     }
   }
 
@@ -254,33 +311,41 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
     }
   }
 
-  async function retryJob(): Promise<void> {
-    if (!currentJob) return;
-    try {
-      await api.retryJob(currentJob.id);
-      toast("Retrying…", "info");
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
-  }
-
-  async function download(format: "txt" | "docx"): Promise<void> {
-    if (!currentJob) return;
-    try {
-      await api.downloadJob(currentJob.id, format, currentJob.title);
-    } catch (error) {
-      toast(errorMessage(error), "error");
-    }
-  }
-
-  async function copyText(text: string): Promise<void> {
+  async function copy(text: string): Promise<void> {
     try {
       await navigator.clipboard.writeText(text);
       toast("Copied to clipboard.", "success");
     } catch {
-      toast("Could not copy — select the text and copy manually.", "error");
+      toast("Could not copy. Select the text and copy manually.", "error");
     }
   }
+
+  // Buttons
+  const clearBtn = button("Clear", "secondary", () => {
+    originalArea.value = "";
+    wordCountUpdater();
+    toast("Original cleared.", "success");
+  });
+  const upload = button("Upload .txt / .docx", "secondary", () => undefined);
+  attachFileInput(upload, ".txt,.md,.markdown,.docx", (file: File) => {
+    void (async () => {
+      upload.textContent = "Reading…";
+      upload.disabled = true;
+      try {
+        const extracted = await api.extractFile(file);
+        originalArea.value = extracted.text;
+        wordCountUpdater();
+        toast(`Loaded ${extracted.filename}.`, "success");
+      } catch (error) {
+        toast(errorMessage(error), "error");
+      } finally {
+        upload.textContent = "Upload .txt / .docx";
+        upload.disabled = false;
+      }
+    })();
+  });
+  rightTitle.append(el("div", "w-full md:w-auto"), startBtn, clearBtn);
+
+  // Also expose input-pane buttons
+  leftTitle.append(upload, clearBtn);
 }
-
-
