@@ -1,24 +1,12 @@
-"""Resolve saved/environment configuration into ready provider instances."""
+"""Build ready provider instances from catalog specs and SQLite overrides."""
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from backend.db import repository
 from backend.providers import catalog
-from backend.providers.adapters.gemini import GeminiProvider
-from backend.providers.adapters.groq import GroqProvider
-from backend.providers.adapters.openrouter import OpenRouterProvider
-from backend.providers.adapters.custom import CustomProvider
+from backend.providers.adapters.openai_compatible import OpenAICompatibleProvider
 from backend.providers.base import Provider
-
-
-_ADAPTERS = {
-    "gemini": GeminiProvider,
-    "groq": GroqProvider,
-    "openrouter": OpenRouterProvider,
-    "custom": CustomProvider,
-}
 
 
 def mask_key(key: str) -> str:
@@ -34,44 +22,31 @@ def mask_key(key: str) -> str:
 class ConfiguredProvider:
     spec: catalog.ProviderSpec
     provider: Provider
-    source: str  # "saved" | "env" | "none"
+    source: str  # "saved" | "none"
     masked_key: str
     model: str
     base_url: str
 
 
 class ProviderRegistry:
-    """Builds providers from SQLite overrides first, then environment variables."""
+    """Builds providers from SQLite overrides, then the catalog defaults."""
 
     def _values(self, spec: catalog.ProviderSpec) -> dict[str, str]:
         saved = repository.provider_setting(spec.id) or {}
-        key = str(saved.get("api_key") or os.environ.get(spec.env_key) or "").strip()
-        model = str(
-            saved.get("model") or os.environ.get(spec.env_model) or spec.default_model
-        ).strip()
-        base = str(
-            saved.get("base_url") or os.environ.get(spec.env_base) or spec.default_base
-        ).strip().rstrip("/")
+        key = str(saved.get("api_key") or "").strip()
+        model = str(saved.get("model") or spec.model).strip()
+        base = str(saved.get("base_url") or spec.base_url).strip().rstrip("/")
         return {"key": key, "model": model, "base": base}
 
     def resolve(self, provider_id: str) -> ConfiguredProvider | None:
         spec = catalog.get_spec(provider_id)
-        if spec is None:
+        if spec is None or not spec.enabled:
             return None
         values = self._values(spec)
-        saved = repository.provider_setting(provider_id) or {}
-        if saved.get("enabled") is not None and int(saved["enabled"]) == 0:
-            return None
         if spec.requires_key and not values["key"]:
             return None
-        if spec.id == "custom" and (not values["base"] or not values["model"]):
-            return None
-        if not catalog.model_allowed(provider_id, values["model"]):
-            return None
-
-        source = "saved" if saved.get("api_key") else ("env" if values["key"] else "none")
-        provider_class = _ADAPTERS[spec.adapter]
-        provider = provider_class(
+        provider = OpenAICompatibleProvider(
+            provider_id=provider_id,
             api_key=values["key"],
             model=values["model"],
             base_url=values["base"],
@@ -79,7 +54,7 @@ class ProviderRegistry:
         return ConfiguredProvider(
             spec=spec,
             provider=provider,
-            source=source,
+            source="saved" if values["key"] else "none",
             masked_key=mask_key(values["key"]),
             model=values["model"],
             base_url=values["base"],
@@ -95,13 +70,7 @@ class ProviderRegistry:
             for spec in catalog.PROVIDERS
             if (configured := self.resolve(spec.id)) is not None
         ]
-        preferred = self.preferred_provider_id()
-        providers.sort(
-            key=lambda item: (
-                0 if item.spec.id == preferred else 1,
-                item.spec.priority,
-            )
-        )
+        providers.sort(key=lambda item: item.spec.priority)
         return providers
 
     def get(self, provider_id: str) -> ConfiguredProvider | None:
@@ -116,28 +85,19 @@ class ProviderRegistry:
         for spec in catalog.PROVIDERS:
             values = self._values(spec)
             record = saved.get(spec.id) or {}
-            resolved = self.resolve(spec.id)
-            source = (
-                "saved"
-                if record.get("api_key")
-                else ("env" if os.environ.get(spec.env_key) else "none")
-            )
             items.append(
                 {
                     "id": spec.id,
                     "name": spec.name,
-                    "tier": spec.tier,
-                    "notes": spec.notes,
-                    "env_key": spec.env_key,
+                    "anonymous": spec.anonymous,
                     "requires_key": spec.requires_key,
-                    "requires_base_url": spec.id == "custom",
-                    "configured": resolved is not None,
-                    "source": source,
+                    "configured": self.resolve(spec.id) is not None,
+                    "source": "saved" if record.get("api_key") else "none",
                     "masked_key": mask_key(values["key"]),
                     "model": values["model"],
                     "base_url": values["base"],
-                    "enabled": record.get("enabled"),
-                    "models": catalog.models_for(spec.id),
+                    "enabled": int(record["enabled"]) if record.get("enabled") is not None else 1,
+                    "rate_limit_requests_per_minute": spec.rate_limit_requests_per_minute,
                 }
             )
         return items

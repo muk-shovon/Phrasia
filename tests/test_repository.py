@@ -15,7 +15,7 @@ def test_document_version_job_chunk_lifecycle() -> None:
         intensity="medium",
         options_json='{"preserve_formatting": true, "keep_quotes": true}',
         total_chunks=1,
-        provider_id="gemini",
+        provider_id="pollinations",
     )
     repository.create_chunks(job_id, [{"text": "Hello world.", "separator": ""}])
 
@@ -81,14 +81,14 @@ def test_interrupted_jobs_become_paused() -> None:
 
 def test_provider_settings_round_trip() -> None:
     repository.upsert_provider_setting(
-        "gemini", api_key="secret-value-1234", model="gemini-2.5-flash"
+        "pollinations", api_key="secret-value-1234", model="gemini-2.5-flash"
     )
-    saved = repository.provider_setting("gemini")
+    saved = repository.provider_setting("pollinations")
     assert saved is not None
     assert saved["api_key"] == "secret-value-1234"
 
     repository.upsert_provider_setting("gemini", model="gemini-2.0-flash")
-    assert repository.provider_setting("gemini")["api_key"] == "secret-value-1234"
+    assert repository.provider_setting("pollinations")["api_key"] == "secret-value-1234"
 
-    repository.delete_provider_key("gemini")
-    assert repository.provider_setting("gemini")["api_key"] is None
+    repository.delete_provider_key("pollinations")
+    assert repository.provider_setting("pollinations")["api_key"] is None

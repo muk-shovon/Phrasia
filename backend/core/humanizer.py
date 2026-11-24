@@ -15,7 +15,6 @@ from backend.core.prompt import (
     normalise_mode,
 )
 from backend.db import repository
-from backend.providers import catalog
 from backend.providers.base import GenerationRequest, GenerationResult, ProviderFailure
 from backend.providers.registry import ConfiguredProvider, ProviderRegistry
 
@@ -229,17 +228,6 @@ async def run_job(
     _RUNNING.add(job_id)
     try:
         available = providers if providers is not None else ProviderRegistry().configured()
-
-        if not catalog.model_allowed(
-            str(job.get("provider_id") or ""), str(job.get("model_id") or "")
-        ):
-            _fail(
-                job_id,
-                "This model is paid and paid models are disabled. Enable "
-                "PAID_MODELS_ENABLED or pick a free model in Settings.",
-                0,
-            )
-            return
 
         if not available:
             _fail(

@@ -17,6 +17,7 @@ class FakeProvider:
     def __init__(
         self,
         text: str = "Rewritten text.",
+        provider_id: str = "pollinations",
         *,
         finish: str = "stop",
         error: ProviderFailure | None = None,
@@ -25,14 +26,15 @@ class FakeProvider:
         self.finish = finish
         self.error = error
         self.calls: list[Any] = []
-        self.model = "fake-model"
+        self.provider_id = provider_id or "pollinations"
+        self.model = "gpt-oss-20b"
 
     async def generate(self, request: Any) -> GenerationResult:
         self.calls.append(request)
         if self.error is not None:
             raise self.error
         return GenerationResult(
-            text=self.text, provider_id="gemini", model_id=self.model, finish_reason=self.finish
+            text=self.text, provider_id=self.provider_id, model_id=self.model, finish_reason=self.finish
         )
 
     async def health(self) -> tuple[bool, str]:
@@ -48,7 +50,7 @@ def _configured(provider_id: str, provider: FakeProvider) -> ConfiguredProvider:
         source="saved",
         masked_key="••••1234",
         model=provider.model,
-        base_url=spec.default_base,
+        base_url=spec.base_url,
     )
 
 
@@ -59,7 +61,7 @@ def _make_job(text: str = "Original sentence one. Original sentence two.") -> in
 def test_truncated_output_is_rejected_and_retried() -> None:
     job_id = _make_job()
     fake = FakeProvider("cut off", finish="length")
-    asyncio.run(run_job(job_id, [_configured("gemini", fake)]))
+    asyncio.run(run_job(job_id, [_configured("pollinations", fake)]))
 
     job = repository.get_job(job_id)
     assert job is not None
@@ -77,13 +79,13 @@ def test_provider_fallback_moves_to_next() -> None:
     asyncio.run(
         run_job(
             job_id,
-            [_configured("gemini", broken), _configured("groq", working)],
+            [_configured("pollinations", broken), _configured("ovh", working)],
         )
     )
     job = repository.get_job(job_id)
     assert job is not None
     assert job["status"] == "completed"
-    assert job["provider_id"] == "groq"
+    assert job["provider_id"] == "ovh"
     assert working.calls
 
 
@@ -96,7 +98,7 @@ def test_chunk_with_spans_round_trips() -> None:
     assert redacted != text
     # The provider echoes the redacted text back plus new words around it.
     fake.text = redacted + " Replacement text."
-    result, _, _ = asyncio.run(_run_chunk_protected(text, "sys", [_configured("gemini", fake)]))
+    result, _, _ = asyncio.run(_run_chunk_protected(text, "sys", [_configured("pollinations", fake)]))
     assert "https://example.com" in result.text
     assert "a@b.com" in result.text
     assert "[PHRASIA_SPAN_" not in result.text
@@ -110,26 +112,12 @@ def test_chunk_fails_when_placeholders_cannot_restore() -> None:
     redacted, spans = extract_spans(text)
     fake = FakeProvider(redacted.replace(spans[0].placeholder, ""))
     try:
-        asyncio.run(_run_chunk_protected(text, "sys", [_configured("gemini", fake)]))
+        asyncio.run(_run_chunk_protected(text, "sys", [_configured("pollinations", fake)]))
     except ChunkFailure as exc:
         assert exc.failure.code == "bad_spans"
     else:
         raise AssertionError("expected ChunkFailure")
 
-
-def test_paid_models_blocked_by_default() -> None:
-    job_id = create_job(
-        "Hello world. This is a test.",
-        provider_id="gemini",
-        mode="balanced",
-        intensity="medium",
-    )
-    repository.update_job(job_id, provider_id="gemini", model_id="gemini-2.5-pro")
-    asyncio.run(run_job(job_id, []))
-    job = repository.get_job(job_id)
-    assert job is not None
-    assert job["status"] == "failed"
-    assert "paid" in str(job["error"]).lower()
 
 
 def test_assembler_has_no_duplicates_or_gaps() -> None:

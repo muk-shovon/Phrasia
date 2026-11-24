@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -58,6 +59,8 @@ class Provider(ABC):
 
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
+_RATE_LIMIT_WAIT_CAP_SECONDS = 45.0
+_RATE_LIMIT_WAIT_FLOOR_SECONDS = 0.5
 
 
 def classify_status(status: int) -> tuple[str, bool]:
@@ -70,6 +73,55 @@ def classify_status(status: int) -> tuple[str, bool]:
     if status in _RETRYABLE_STATUS:
         return "provider_unavailable", True
     return "request_rejected", False
+
+
+class RateLimiter:
+    """Per-provider min interval enforcement for anonymous lanes.
+
+    Complements the server's 429 handling: polls the rate limit before sending
+    and raises ``ProviderFailure(code='rate_limited')`` when an immediate
+    send would be refused.
+    """
+
+    def __init__(self) -> None:
+        self._next_allowed: dict[str, float] = {}
+        self._interval: dict[str, float] = {}
+
+    def set_interval(self, provider_id: str, interval_seconds: float) -> None:
+        self._interval[provider_id] = interval_seconds
+
+    def reset(self, provider_id: str) -> None:
+        self._next_allowed[provider_id] = 0.0
+
+    async def wait_if_limited(self, provider_id: str) -> None:
+        interval = self._interval.get(provider_id, 0.0)
+        if not interval:
+            return
+        now = time.monotonic()
+        allowed = self._next_allowed.get(provider_id, 0.0)
+        if allowed - now > 0:
+            raise ProviderFailure(
+                "Free endpoint rate-limited; try again in a minute.",
+                code="rate_limited",
+                retryable=True,
+            )
+        self._next_allowed[provider_id] = now + interval
+
+    def note_429(self, provider_id: str, retry_after: float) -> None:
+        wait = max(retry_after, _RATE_LIMIT_WAIT_FLOOR_SECONDS)
+        self._next_allowed[provider_id] = time.monotonic() + min(
+            wait, _RATE_LIMIT_WAIT_CAP_SECONDS
+        )
+
+
+_RATE_LIMITERS: dict[str, RateLimiter] = {}
+
+
+def rate_limiter_for(provider_id: str, spec_interval: float = 0.0) -> RateLimiter:
+    limiter = _RATE_LIMITERS.setdefault(provider_id, RateLimiter())
+    if spec_interval:
+        limiter.set_interval(provider_id, spec_interval)
+    return limiter
 
 
 async def post_json(

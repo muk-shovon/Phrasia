@@ -8,9 +8,10 @@ from fastapi import APIRouter, Depends
 from backend.api.deps import require_owner
 from backend.api.errors import UnsafeEndpoint, fail, validate_base_url
 from backend.api.schemas import PreferencesUpdate, ProviderUpdate
-from backend.config import CHUNK_CHARS, DB_PATH, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES, PAID_MODELS_ENABLED
+from backend.config import CHUNK_CHARS, DB_PATH, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES
 from backend.db import repository
 from backend.providers import catalog
+from backend.providers.base import get_json
 from backend.providers.registry import ProviderRegistry
 
 router = APIRouter(prefix="/api/settings", tags=["settings"], dependencies=[Depends(require_owner)])
@@ -22,7 +23,7 @@ async def get_settings() -> dict[str, Any]:
     return {
         "providers": registry.settings_view(),
         "preferred_provider": registry.preferred_provider_id(),
-        "paid_models_enabled": PAID_MODELS_ENABLED,
+        "paid_models_enabled": False,
         "database_path": str(DB_PATH),
         "limits": {
             "max_input_chars": MAX_INPUT_CHARS,
@@ -53,17 +54,43 @@ async def update_provider(provider_id: str, payload: ProviderUpdate) -> dict[str
         base_url=base_url,
         enabled=payload.enabled,
     )
+    provider = ProviderRegistry().resolve(provider_id)
+    return {"provider": _provider_card(provider_id, provider)}
+
+
+def _provider_card(provider_id: str, provider: Any) -> dict[str, Any]:
     registry = ProviderRegistry()
-    return {
-        "provider": next(
-            (
-                item
-                for item in registry.settings_view()
-                if item["id"] == provider_id
-            ),
-            None,
-        )
-    }
+    card = next(
+        (item for item in registry.settings_view() if item["id"] == provider_id), None
+    )
+    if card is None:
+        raise fail(404, "Unknown provider.", "unknown_provider")
+    enabled = repository.provider_setting(provider_id) or {}
+    card["enabled"] = int(enabled.get("enabled")) if enabled.get("enabled") is not None else 1
+    return card
+
+
+@router.post("/providers/{provider_id}/models")
+async def list_provider_models(provider_id: str) -> dict[str, Any]:
+    """Ask a provider what models exist (calls GET /models). Mocked in tests."""
+    configured = ProviderRegistry().resolve(provider_id)
+    if configured is None:
+        raise fail(404, "This provider is not configured.", "not_configured")
+    status, data = await get_json(
+        f"{configured.provider.base_url}/models",
+        headers=configured.provider._headers(),  # type: ignore[attr-defined]
+    )
+    if status == 200 and data is not None:
+        entries = data.get("data", data.get("models", []))
+        if isinstance(entries, list):
+            models = [
+                {"id": str(item.get("id") or item.get("name") or ""), "label": str(item.get("id") or item.get("name") or "")}
+                for item in entries
+                if isinstance(item, dict) and (item.get("id") or item.get("name"))
+            ]
+            return {"provider_id": provider_id, "models": models[:50]}
+        raise fail(502, "The provider returned no model list.", "no_model_list")
+    raise fail(502, f"Provider returned HTTP {status}.", "provider_error")
 
 
 @router.delete("/providers/{provider_id}/key")

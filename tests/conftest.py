@@ -7,7 +7,7 @@ import tempfile
 _TEST_DIR = tempfile.mkdtemp(prefix="phrasia-tests-")
 os.environ["PHRASIA_DATA_DIR"] = _TEST_DIR
 os.environ["PHRASIA_DB_PATH"] = os.path.join(_TEST_DIR, "test.db")
-os.environ["PAID_MODELS_ENABLED"] = "false"
+os.environ["PHRASIA_CHUNK_CHARS"] = "2560"
 
 import pytest  # noqa: E402
 

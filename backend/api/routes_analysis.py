@@ -1,6 +1,7 @@
 """Plagiarism/similarity check, reference library and the local style signal."""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -24,6 +25,7 @@ def _record(kind: str, text: str, result: dict[str, Any]) -> None:
 async def check_plagiarism(payload: TextRequest) -> dict[str, Any]:
     references = repository.reference_documents_with_content()
     result = plagiarism.check(payload.text, references)
+    result["web"] = await asyncio.to_thread(plagiarism.web_check, payload.text)
     _record("plagiarism", payload.text, result)
     return result
 

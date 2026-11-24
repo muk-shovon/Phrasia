@@ -1,16 +1,56 @@
-"""Local similarity check against the owner's reference library.
-
-Deliberately local: no text leaves the machine, nothing is compared against the
-open internet.
-"""
+"""Plagiarism/similarity check against the owner's library + real web search via ddgs."""
 from __future__ import annotations
 
 import difflib
+import logging
 import re
 from collections import Counter
 from typing import Any
 
 from backend.core.chunking import split_sentences
+
+logger = logging.getLogger(__name__)
+
+DISCLAIMER_WEB = "Web search powered by ddgs — requires outbound internet access."
+
+try:
+    from ddgs import DDGS
+
+    _DDGS_AVAILABLE = True
+except ImportError:  # pragma: no cover - depends on environment
+    DDGS = None  # type: ignore[assignment]
+    _DDGS_AVAILABLE = False
+
+
+def web_check(text: str, max_results: int = 8) -> dict[str, Any]:
+    """Real web search for near-duplicate passages. Never verifies anything."""
+    if not _DDGS_AVAILABLE or DDGS is None:
+        return {"available": False, "results": [], "provider": None, "error": "ddgs not installed"}
+    excerpt = " ".join(text.split())[:400]
+    if not excerpt:
+        return {"available": False, "results": [], "provider": None, "error": "empty text"}
+    try:
+        results = DDGS().text(excerpt, max_results=max_results) or []
+    except Exception as exc:  # network issues, empty results, etc.
+        logger.warning("web similarity check failed: %s", exc)
+        return {"available": False, "results": [], "provider": "ddgs", "error": str(exc)}
+    items = [
+        {
+            "title": str(r.get("title", ""))[:120],
+            "url": str(r.get("href", "")),
+            "snippet": str(r.get("body", ""))[:300],
+        }
+        for r in results
+        if isinstance(r, dict)
+    ]
+    return {
+        "available": True,
+        "results": items,
+        "provider": "ddgs",
+        "disclaimer": DISCLAIMER_WEB,
+        "error": None,
+    }
+
 
 _WORD = re.compile(r"[a-z0-9']+")
 SHINGLE_SIZE = 5

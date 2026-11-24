@@ -1,11 +1,11 @@
-# Decision Log — Phrasia
+# Decision Log - Phrasia
 
 Short, honest decisions. Overengineering without value was removed.
 
-## D-001: FastAPI + SQLite + Vite/TS, no framework, no auth yet
+## D-001: FastAPI + SQLite + Vite/TS, no auth yet
 - **Stack:** Python 3.11+ (FastAPI, uvicorn, SQLite via stdlib sqlite3, httpx, python-docx), Vite + TypeScript (strict) + Tailwind v4 for the frontend.
 - **No auth:** `require_owner()` in `backend/api/deps.py` is a no-op with a TODO. The app binds to `127.0.0.1` only.
-- **No ML models:** rewriting goes through external LLM APIs (Gemini, Groq, OpenRouter, custom). No local models are downloaded or run.
+- **No ML models:** rewriting goes through external LLM APIs (anonymous LLM lanes). No local models are downloaded or run.
 
 ## D-002: Local SQLite at data/phrasia.db
 - All SQL lives in `backend/db/repository.py` (+ `schema.sql`). Nothing else writes SQL.
@@ -17,11 +17,18 @@ Short, honest decisions. Overengineering without value was removed.
 
 ## D-004: The style signal stays honest
 - Returns `label` + `label_description: "Local style signal"` and signals; no verdict, no percentage, disclaimer: "style signal, not proof of authorship".
-- A `humanize → scan → repeat` loop is NOT a feature here.
+- A `humanize -> scan -> repeat` loop is NOT a feature here.
 
-## D-005: Web plagiarism check not added
-- Verified on 2026-11-24: Winston AI (POST /api/v1/plagiarism) → 401 `authentication_error` without a key; plagiarism.free (POST /api/v1/check/) → 401 `missing_bearer_token`.
-- No free, verified API found → similarity stays local (word shingles + difflib). No invented endpoints.
+## D-005: Default providers are anonymous-first
+- Catalog: Pollinations (priority 10) and OVHcloud AI Endpoints (priority 20). Both verified anonymous in 2026-11-24 with real requests.
+- Per-provider rate limiter (`RateLimiter` in `backend/providers/base.py`) enforced using catalog `rate_limit_requests_per_minute`.
+- Legacy adapters (gemini.py, groq.py, openrouter.py) and their env vars/settings fields were deleted.
 
-## D-006: run.py is the one command
+## D-006: Plagiarism = local + real web search via ddgs
+- Local shingles/difflib vs reference library; plus `ddgs==9.16.1` real search calls (verified working in 2026-11).
+
+## D-007: Chunks are small (~800 tokens)
+- `CHUNK_CHARS` default 2,560 (~800 tokens); configurable via `HUMANIZE_CHUNK_CHARS`.
+
+## D-008: run.py is the one command
 - `python run.py`: auto-runs `npm install` + `npm run build` if `frontend/dist` is missing (npm.cmd for Windows), starts uvicorn on 127.0.0.1:8000.
