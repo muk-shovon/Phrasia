@@ -8,13 +8,7 @@ from fastapi import APIRouter, Depends
 from backend.api.deps import require_owner
 from backend.api.errors import UnsafeEndpoint, fail, validate_base_url
 from backend.api.schemas import PreferencesUpdate, ProviderUpdate
-from backend.config import (
-    CHUNK_CHARS,
-    DB_PATH,
-    MAX_INPUT_CHARS,
-    MAX_UPLOAD_BYTES,
-    PAID_MODELS_ENABLED,
-)
+from backend.config import CHUNK_CHARS, DB_PATH, MAX_INPUT_CHARS, MAX_UPLOAD_BYTES, PAID_MODELS_ENABLED
 from backend.db import repository
 from backend.providers import catalog
 from backend.providers.registry import ProviderRegistry

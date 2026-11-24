@@ -1,4 +1,4 @@
-"""Shared OpenAI-compatible /chat/completions adapter (Groq, OpenRouter, custom)."""
+"""Shared OpenAI-compatible /chat/completions base (Groq, OpenRouter, custom)."""
 from __future__ import annotations
 
 from backend.providers.base import (
@@ -12,6 +12,8 @@ from backend.providers.base import (
 
 
 class OpenAICompatibleProvider(Provider):
+    """Speaks the /chat/completions protocol used by Groq, OpenRouter and custom endpoints."""
+
     def __init__(
         self,
         provider_id: str,
@@ -62,8 +64,10 @@ class OpenAICompatibleProvider(Provider):
             )
 
         raw_finish = str(choice.get("finish_reason", "stop")).lower()
-        finish = "length" if raw_finish in {"length", "max_tokens"} else (
-            "blocked" if raw_finish in {"content_filter"} else "stop"
+        finish = (
+            "length"
+            if raw_finish in {"length", "max_tokens", "max-tokens", "end_turn: max_tokens"}
+            else "blocked" if raw_finish in {"content_filter"} else "stop"
         )
         model_id = str(data.get("model") or self.model)
         return GenerationResult(

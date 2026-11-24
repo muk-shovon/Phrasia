@@ -81,6 +81,8 @@ def create_job(
             {
                 "preserve_formatting": resolved_options.preserve_formatting,
                 "keep_quotes": resolved_options.keep_quotes,
+                "deep_humanize": resolved_options.deep_humanize,
+                "remove_em_dashes": resolved_options.remove_em_dashes,
             }
         ),
         total_chunks=len(chunks),
@@ -118,7 +120,9 @@ async def _generate_chunk(
     attempts = 0
     for configured in providers:
         max_tokens = _max_tokens(text)
-        for _ in range(2):
+        for attempt_no in range(1, _MAX_CHUNK_ATTEMPTS + 1):
+            if attempt_no > 1:
+                await asyncio.sleep(0.5 * (attempt_no - 1))
             attempts += 1
             request = GenerationRequest(
                 text=text,
@@ -158,10 +162,57 @@ async def _generate_chunk(
     raise ChunkFailure(last_error, attempts)
 
 
+async def _run_chunk_protected(
+    text: str,
+    system: str,
+    providers: list[ConfiguredProvider],
+) -> tuple[GenerationResult, ConfiguredProvider, int]:
+    """Generate a chunk after masking protected spans.
+
+    Spans are restored exactly; if any come back missing or duplicated, the
+    chunk is retried (raised as ChunkFailure).
+    """
+    redacted, spans = protected_spans.extract_spans(text)
+    result, used, attempts = await _generate_chunk(redacted, system, providers)
+    restored = protected_spans.restore_spans(result.text, spans)
+    if restored is None:
+        raise ChunkFailure(
+            ProviderFailure(
+                "The provider dropped or duplicated a protected span. The chunk was not saved.",
+                code="bad_spans",
+                retryable=True,
+            ),
+            attempts,
+        )
+    result.text = restored
+    return result, used, attempts
+
+
 def _fail(job_id: int, message: str, completed: int) -> None:
     repository.update_job(
         job_id, status="failed", error=message, completed_chunks=completed
     )
+
+
+async def _optional_deep_pass(
+    text: str, system: str, provider: ConfiguredProvider
+) -> str:
+    """One extra LLM pass, only when the owner enabled deep_humanize."""
+    redacted, spans = protected_spans.extract_spans(text)
+    request = GenerationRequest(
+        text=redacted,
+        system="Return only the cleaned-up version of this passage.",
+        model=provider.model,
+        max_tokens=min(8192, _max_tokens(text) + 256),
+        timeout=PROVIDER_TIMEOUT_SECONDS,
+    )
+    try:
+        result = await provider.provider.generate(request)
+    except ProviderFailure as exc:
+        logger.warning("deep pass failed (code=%s)", exc.code)
+        return text
+    restored = protected_spans.restore_spans(result.text, spans)
+    return restored if restored is not None else text
 
 
 async def run_job(
@@ -178,6 +229,18 @@ async def run_job(
     _RUNNING.add(job_id)
     try:
         available = providers if providers is not None else ProviderRegistry().configured()
+
+        if not catalog.model_allowed(
+            str(job.get("provider_id") or ""), str(job.get("model_id") or "")
+        ):
+            _fail(
+                job_id,
+                "This model is paid and paid models are disabled. Enable "
+                "PAID_MODELS_ENABLED or pick a free model in Settings.",
+                0,
+            )
+            return
+
         if not available:
             _fail(
                 job_id,
@@ -203,7 +266,7 @@ async def run_job(
             if current is None or current["status"] == "cancelled":
                 return
             try:
-                result, used, attempts = await _generate_chunk(
+                result, used, attempts = await _run_chunk_protected(
                     str(chunk["source_text"]), system, candidates
                 )
             except ChunkFailure as exc:
@@ -249,6 +312,9 @@ async def run_job(
         if not joined:
             _fail(job_id, "The provider returned no usable output.", completed)
             return
+
+        if options.deep_humanize and candidates:
+            joined = await _optional_deep_pass(joined, system, candidates[0])
 
         version_id = repository.add_version(
             int(job["document_id"]),

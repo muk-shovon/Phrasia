@@ -73,13 +73,6 @@ export function pageHeader(title: string, subtitle: string): HTMLElement {
   return header;
 }
 
-export function sectionTitle(title: string, subtitle?: string): HTMLElement {
-  const box = el("div", "mb-3");
-  box.append(el("h2", "text-sm font-semibold uppercase tracking-wider text-[#5C6B60]", title));
-  if (subtitle) box.append(el("p", "mt-1 text-sm text-[#5C6B60]", subtitle));
-  return box;
-}
-
 export function field(label: string, control: HTMLElement, hint?: string): HTMLElement {
   const wrapper = el("label", "block");
   wrapper.append(el("span", "mb-1.5 block text-sm font-medium text-[#25352A]", label));

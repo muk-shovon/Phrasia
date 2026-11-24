@@ -1,7 +1,7 @@
 """Local similarity check against the owner's reference library.
 
-This is deliberately local: no text leaves the machine, and nothing is compared
-against the open internet. The UI must say so.
+Deliberately local: no text leaves the machine, nothing is compared against the
+open internet.
 """
 from __future__ import annotations
 
@@ -72,7 +72,10 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
     input_tokens = _tokens(text)
     input_shingles = _shingles(input_tokens)
     sentences = _sentences(text)
-    sentence_sets = [(sentence, _shingles(_tokens(sentence), SENTENCE_SHINGLE_SIZE)) for sentence in sentences]
+    sentence_sets = [
+        (sentence, _shingles(_tokens(sentence), SENTENCE_SHINGLE_SIZE))
+        for sentence in sentences
+    ]
 
     matches: list[dict[str, Any]] = []
     if input_shingles:
@@ -116,9 +119,7 @@ def check(text: str, references: list[dict[str, Any]]) -> dict[str, Any]:
 
     notes: list[str] = []
     if not references:
-        notes.append(
-            "No reference documents yet. Add your own texts to compare against."
-        )
+        notes.append("No reference documents yet. Add your own texts to compare against.")
     if total_sentences == 0:
         notes.append("Add at least a few full sentences for a useful comparison.")
     if input_tokens and len(input_tokens) < 40:

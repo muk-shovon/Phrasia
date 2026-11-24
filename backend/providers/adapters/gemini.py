@@ -1,4 +1,4 @@
-"""Native Google Gemini generateContent adapter."""
+"""Google Gemini generateContent adapter. Sends the system prompt via systemInstruction."""
 from __future__ import annotations
 
 from backend.providers.base import (
@@ -58,7 +58,7 @@ class GeminiProvider(Provider):
             raise ProviderFailure("Gemini returned an empty response.", code="empty_response")
 
         raw_finish = str(candidate.get("finishReason", "")).upper()
-        if raw_finish in {"MAX_TOKENS", "LENGTH"}:
+        if raw_finish in {"MAX_TOKENS", "LENGTH", "MAX_TOKENS_LIMIT", "TOKEN_LIMIT"}:
             finish = "length"
         elif raw_finish in {"SAFETY", "RECITATION", "BLOCKLIST", "PROHIBITED_CONTENT"}:
             finish = "blocked"

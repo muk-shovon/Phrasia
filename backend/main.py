@@ -1,6 +1,6 @@
 """Phrasia application entrypoint.
 
-Run locally with:  python -m backend.main
+Run locally with:  python run.py
 The API is served from /api/* and the built frontend from frontend/dist.
 """
 from __future__ import annotations
@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.api import api_router
+from backend.api import ROUTERS
 from backend.config import FRONTEND_DIST
 from backend.db import repository
 
@@ -42,7 +42,8 @@ app = FastAPI(
     openapi_url="/api/openapi.json",
     lifespan=lifespan,
 )
-app.include_router(api_router)
+for _router in ROUTERS:
+    app.include_router(_router)
 
 _ASSETS_DIR = FRONTEND_DIST / "assets"
 if _ASSETS_DIR.is_dir():
