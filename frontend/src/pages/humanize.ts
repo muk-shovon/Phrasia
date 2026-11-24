@@ -137,6 +137,12 @@ export async function renderHumanize(root: HTMLElement): Promise<void> {
   const originalArea = el("textarea", `${TEXT_AREA_CLASS} min-h-[400px]`);
   originalArea.value = takeDraft();
   originalArea.spellcheck = true;
+  originalArea.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      void submitJob();
+    }
+  });
 
   const clearBtn = button("Clear", "secondary", () => {
     originalArea.value = "";

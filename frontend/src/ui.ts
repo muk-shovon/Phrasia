@@ -3,24 +3,6 @@ import { errorMessage } from "./api";
 // ---------------------------------------------------------------------------
 // Design system (calm neutrals + one accent, all Tailwind utilities, 16px min)
 // ---------------------------------------------------------------------------
-export const TOKEN = {
-  pageBg: "#F5F7F3",
-  pageText: "#16251C",
-  card: "#FFFFFF",
-  cardBorder: "#DFE4DB",
-  cardShadow: "shadow-[0_1px_3px_rgba(20,32,22,0.06)]",
-  textPrimary: "#1D3026",
-  textSecondary: "#5C6C62",
-  textMuted: "#7E8D83",
-  accent: "#1F6B4A",
-  accentHover: "#1A5D3F",
-  accentText: "#1F6B4A",
-  inputBg: "#FFFFFF",
-  inputBorder: "#CFD8C7",
-  inputText: "#1D3026",
-  placeholder: "#8C9890",
-} as const;
-
 // ---------------------------------------------------------------------------
 // Elements
 // ---------------------------------------------------------------------------
@@ -39,24 +21,6 @@ export function clear(node: HTMLElement): void {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
 
-export function attachFileInput(
-  trigger: HTMLButtonElement,
-  accept: string,
-  onFile: (file: File) => void,
-): void {
-  const input = el("input");
-  input.type = "file";
-  input.accept = accept;
-  input.className = "hidden";
-  input.addEventListener("change", () => {
-    const file = input.files?.[0];
-    if (file) onFile(file);
-    input.value = "";
-  });
-  trigger.addEventListener("click", () => input.click());
-  trigger.after(input);
-}
-
 export function setDraft(text: string): void {
   try {
     sessionStorage.setItem("phrasia:draft", text);
@@ -73,14 +37,6 @@ export function takeDraft(): string {
   } catch {
     return "";
   }
-}
-
-export function selectProviderField(
-  label: string,
-  options: Array<{ value: string; label: string }>,
-): HTMLElement {
-  const node = select(label, options, { value: options[0]?.value ?? "" });
-  return node;
 }
 
 export function hr(): HTMLElement {
@@ -112,25 +68,6 @@ export function button(
   return node;
 }
 
-export function spinner(size = 24): HTMLSpanElement {
-  return el(
-    "span",
-    `inline-block ${size === 24 ? "h-6 w-6" : "h-4 w-4"}`,
-  );
-}
-
-export function spinnerInline(size = 20): HTMLSpanElement {
-  const svg = `<svg viewBox="0 0 24 24" fill="none" class="${
-    size === 20 ? "h-5 w-5" : "h-6 w-6"
-  } animate-spin" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" stroke="#1F6B4A" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.25"/>
-    <path d="M4 12a8 8 0 0 1 8-8" stroke="#1F6B4A" stroke-width="3" stroke-linecap="round"/></svg>`;
-  return el("span", "", svg);
-}
-
-// ---------------------------------------------------------------------------
-// Form controls
-// ---------------------------------------------------------------------------
 export function input(
   label: string,
   opts: {
@@ -227,20 +164,6 @@ export function card(className = ""): HTMLElement {
   );
 }
 
-export function cardTitle(title: string, subtitle?: string): HTMLElement {
-  const box = el("div", "");
-  box.append(el("h2", "text-base font-semibold text-[#16251C]", title));
-  if (subtitle) box.append(el("p", "mt-1 text-sm text-[#5C6C62]", subtitle));
-  return box;
-}
-
-export function sectionHead(title: string, subtitle?: string): HTMLElement {
-  const box = el("div", "mb-4");
-  box.append(el("h2", "text-xl font-semibold tracking-tight text-[#16251C]", title));
-  if (subtitle) box.append(el("p", "mt-1.5 text-sm text-[#5C6C62]", subtitle));
-  return box;
-}
-
 export function pageHead(title: string, subtitle?: string): HTMLElement {
   const box = el("header", "mb-7");
   box.append(el("h1", "text-3xl font-semibold tracking-tight text-[#16251C]", title));
@@ -277,21 +200,6 @@ export function toast(message: string, kind: "error" | "success" | "info" = "inf
   window.setTimeout(() => node.remove(), 3600);
 }
 
-export function emptyState(message: string, hint = ""): HTMLElement {
-  const box = el(
-    "div",
-    "text-center py-14 rounded-xl border-2 border-dashed border-[#DDE2D6] bg-[#F7F8F5]",
-  );
-  box.append(el("p", "text-base font-medium text-[#25352A]", message));
-  if (hint) box.append(el("p", "mt-1.5 text-sm text-[#7C8A80]", hint));
-  return box;
-}
-
-export function fieldError(message: string): HTMLElement {
-  return el("p", "mt-2 text-sm text-[#8B2020]", message);
-}
-
-// Inline SVG icons (no CDN, no runtime deps)
 export const ICONS = {
   humanize: `<svg viewBox="0 0 24 24" fill="none" stroke="#1F6B4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M12 20h0a8 8 0 0 0 8-8c0-2.5-2-5-4.5-7C11 2 11.5 0 9.5 0c-2 0-4.5 1-5 3.5C3 6 1.5 7.5 2 10c1 2 3.5 3.5 6 3.5H12v6z"/></svg>`,
   plagiarism: `<svg viewBox="0 0 24 24" fill="none" stroke="#1F6B4A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5"><path d="M16 10.5l-6-3-3 6.5 9 3.5z"/><path d="M11 19l-5 4h14l-5-4z"/><line x1="3" y1="4.5" x2="21" y2="4.5"/></svg>`,
@@ -325,19 +233,6 @@ export function formatDate(value: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-export function reportError(error: unknown): void {
-  toast(errorMessage(error), "error");
-}
-
-export function setBusy(target: HTMLButtonElement, busy: boolean, busyLabel = "Working…"): void {
-  if (busy) {
-    target.disabled = true;
-    target.textContent = busyLabel;
-  } else {
-    target.disabled = false;
-  }
 }
 
 export { errorMessage };
