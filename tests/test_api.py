@@ -28,22 +28,44 @@ def test_humanize_response_shape(client) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"rewritten", "sentences", "diff", "style_check", "document_id"}
+    assert set(body) == {"rewritten", "sentences", "diff", "style_check", "report", "document_id"}
     assert body["rewritten"]
     assert body["sentences"]
     assert "segments" in body["diff"]
     check = body["style_check"]
     assert set(check) == {
-        "patterns_before", "patterns_after", "patterns_removed",
         "sentences_restructured", "sentences_total", "words_changed_pct",
     }
     assert check["sentences_total"] == 1
+    report = body["report"]
+    assert set(report) == {
+        "found", "fixed", "survived", "sections", "review", "dropped_by_rule", "reason",
+    }
+    assert report["found"] == report["fixed"] + report["survived"]
 
 
 def test_humanize_validation(client) -> None:
     assert client.post("/api/humanize", json={"text": ""}).status_code == 422
     assert client.post("/api/humanize", json={"text": "   "}).status_code == 422
     assert client.post("/api/humanize", json={"text": "Hello.", "variation": -1}).status_code == 422
+
+
+def test_humanize_style_options(client) -> None:
+    dashed = "The policy \u2014 announced today \u2014 starts Friday."
+    held = client.post(
+        "/api/humanize",
+        json={"text": dashed, "replace_dashes": False},
+    ).json()
+    assert held["rewritten"] == dashed
+
+    quoted = "He said \u201cyes\u201d. It could potentially work. The report is high-quality."
+    held_quotes = client.post(
+        "/api/humanize",
+        json={"text": quoted, "straight_quotes": False},
+    ).json()
+    assert "\u201c" in held_quotes["rewritten"]
+    straight = client.post("/api/humanize", json={"text": quoted}).json()
+    assert "\u201c" not in straight["rewritten"]
 
 
 def test_export_is_plain_utf8_and_docx(client) -> None:

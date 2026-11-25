@@ -13,7 +13,6 @@ from backend.engine import plan
 
 DATA = Path(__file__).resolve().parent / "data"
 _WEIGHTS_PATH = DATA / "ranker.json"
-_PATTERNS_PATH = DATA / "ai_patterns.json"
 _LM_PATH = DATA / "lm.json"
 _WORD = re.compile(r"[A-Za-z0-9']+")
 
@@ -38,29 +37,11 @@ def weights() -> dict[str, float]:
     return result
 
 
-@lru_cache(maxsize=1)
-def _pattern_rules() -> list[tuple[str, re.Pattern[str]]]:
-    compiled: list[tuple[str, re.Pattern[str]]] = []
-    for item in json.loads(_PATTERNS_PATH.read_text(encoding="utf-8")):
-        raw = str(item.get("pattern", ""))
-        if not raw:
-            continue
-        if item.get("kind") == "regex":
-            pattern = raw
-        else:
-            parts = [part.strip() for part in raw.split("|") if part.strip()]
-            if not parts:
-                continue
-            pattern = r"(?<!\w)(?:" + "|".join(map(re.escape, parts)) + r")(?!\w)"
-        try:
-            compiled.append((str(item["id"]), re.compile(pattern, re.IGNORECASE | re.MULTILINE)))
-        except re.error:
-            continue
-    return compiled
-
-
 def pattern_count(text: str) -> int:
-    return sum(len(rule.findall(text or "")) for _id, rule in _pattern_rules())
+    """Gated tells in the text, from the same scanner the style check uses."""
+    from backend.engine.skill import scan as skill_scan
+
+    return len(skill_scan.scan(text or ''))
 
 
 def similarity(source: str, candidate: str) -> float:

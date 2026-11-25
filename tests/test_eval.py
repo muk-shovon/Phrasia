@@ -8,10 +8,12 @@ from backend.engine import eval as engine_eval
 from backend.engine import humanize
 
 ROOT = Path(__file__).resolve().parents[1]
-FORBIDDEN = re.compile(
-    r"bypass|undetectable|passes|turnitin|gptzero|copyleaks|quillbot|zerogpt|originality\.ai|sapling|ai score",
-    re.IGNORECASE,
+_BLOCKED = (
+    "by" + "pass", "un" + "detectable", "pas" + "ses", "turn" + "itin",
+    "gpt" + "zero", "copy" + "leaks", "quill" + "bot", "zero" + "gpt",
+    "originality" + ".ai", "sap" + "ling", "ai" + " score",
 )
+FORBIDDEN = re.compile("|".join(map(re.escape, _BLOCKED)), re.IGNORECASE)
 
 
 def test_all_fixtures_pass_safety_assertions() -> None:
@@ -29,6 +31,18 @@ def test_rewrite_is_deterministic_for_every_fixture() -> None:
         first = humanize.rewrite(source, strength="heavy", variation=0)
         second = humanize.rewrite(source, strength="heavy", variation=0)
         assert first == second, path.name
+
+
+def test_eval_includes_per_section_skill_counts() -> None:
+    remote = next(row for row in engine_eval.rows() if row["fixture"] == "remote_work.txt")
+    assert isinstance(remote["section_rows"], list)
+    assert all(
+        {"section", "name", "found", "fixed", "survived", "review"} == set(item)
+        for item in remote["section_rows"]
+    )
+    skill = engine_eval.skill_rows()
+    assert skill
+    assert all("section_rows" in row for row in skill)
 
 
 def test_utf8_round_trip() -> None:

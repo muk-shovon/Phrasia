@@ -14,8 +14,7 @@ from backend.engine.lexicon import COORDINATORS, SUBORDINATORS
 DATA = Path(__file__).resolve().parent / "data"
 _RULES_PATH = DATA / "rules.json"
 _PHRASES_PATH = DATA / "phrases.json"
-_WORDS_PATH = DATA / "words.json"
-_LEAD = re.compile(r"^(When|Although|Because|Even when|Through|With|Using|In|Slowly but surely)\b([^,]{0,90}),\s+(.+)$")
+_LEAD = re.compile(r"^(When|Although|Because|Even when|Through|With|Using|In)\b([^,]{0,90}),\s+(.+)$")
 _FRONT_ADVERB = re.compile(r"^(.{4,80}?)\s+(also|still|often|usually)\s+(.{3,})$")
 _RELATIVE = re.compile(r"^(.{4,90}?)\s+where\s+(.{4,90})$")
 _TAIL = re.compile(r"^(.+?),\s+(so|while)\s+(.+)$")
@@ -28,6 +27,20 @@ _PASSIVE_VERBS = {
 _PASSIVE = re.compile(
     r"^(The|A|An)?\s*([A-Za-z][A-Za-z\s]{0,40}?)\s+(is|are|was|were)\s+"
     r"(written|made|sent|built|shown|chosen|given|found)\s+by\s+([A-Za-z][A-Za-z\s]{0,40}?)\.$",
+    re.IGNORECASE,
+)
+_PASSIVE_NEEDED = re.compile(
+    r"^No\s+([A-Za-z][\w -]{1,50}?)\s+(?:is\s+|are\s+)?needed([.!?])$",
+    re.IGNORECASE,
+)
+_TRIAD = re.compile(
+    r"^(.{0,80}?[A-Za-z][\w' -]{0,30}),\s+([A-Za-z][\w' -]{0,30}),\s+"
+    r"and\s+([A-Za-z][\w' -]{0,30})([.!?])$",
+    re.IGNORECASE,
+)
+_RESTATED_CONTRAST = re.compile(
+    r"^(?:It|This|That)(?:'s| is)\s+not\s+(?P<negative>[^,;.!?]{2,70})[,;]\s*"
+    r"(?P<positive>(?:it|this|that)(?:'s| is)\s+[^.!?]{2,90})(?P<stop>[.!?])$",
     re.IGNORECASE,
 )
 _PHRASE_VERBS = {
@@ -53,11 +66,6 @@ def rules() -> list[dict[str, Any]]:
 @lru_cache(maxsize=1)
 def phrases() -> list[dict[str, Any]]:
     return json.loads(_PHRASES_PATH.read_text(encoding="utf-8"))["phrases"]
-
-
-@lru_cache(maxsize=1)
-def words() -> list[dict[str, Any]]:
-    return json.loads(_WORDS_PATH.read_text(encoding="utf-8"))
 
 
 def _soften(text: str) -> str:
@@ -170,6 +178,44 @@ def passive_active(sentence: str, **_: Any) -> list[str]:
     return [f"{actor.strip().capitalize()} {verb} {subject.strip().lower()}."]
 
 
+def passive_needed(sentence: str, **_: Any) -> list[str]:
+    match = _PASSIVE_NEEDED.match(sentence.strip())
+    if not match:
+        return []
+    subject, stop = match.groups()
+    value = subject.lower().strip()
+    if not value.startswith(("a ", "an ", "any ", "the ")) and not value.endswith("s"):
+        article = "an" if value[:1] in "aeiou" else "a"
+        value = f"{article} {value}"
+    return [f"You do not need {value}{stop}"]
+
+
+def triad(sentence: str, **_: Any) -> list[str]:
+    """Offer a low-priority triad reshaping when no protected fact is present."""
+    match = _TRIAD.match(sentence.strip())
+    if not match:
+        return []
+    first, second, third, stop = match.groups()
+    if any(re.search(r"\d|https?://|\[PHRASIA_|\b[A-Z]{2,}", item) for item in (first, second, third)):
+        return []
+    if any(len(item.split()) > 7 for item in (first, second, third)):
+        return []
+    return [f"{first} and {second}, plus {third}{stop}"]
+
+
+def contrast_restatement(sentence: str, **_: Any) -> list[str]:
+    match = _RESTATED_CONTRAST.match(sentence.strip())
+    if not match:
+        return []
+    negative = set(re.findall(r"[a-z]+", match.group("negative").lower()))
+    positive_text = re.sub(r"^(?:it|this|that)(?:'s| is)\s+", "", match.group("positive"), flags=re.I)
+    positive = set(re.findall(r"[a-z]+", positive_text.lower()))
+    if not negative or not positive or len(negative & positive) / min(len(negative), len(positive)) < 0.6:
+        return []
+    clause = match.group("positive")
+    return [f"{clause[:1].upper()}{clause[1:]}{match.group('stop')}"]
+
+
 def noun_phrase_verb(sentence: str, **_: Any) -> list[str]:
     results: list[str] = []
     for phrase, replacement in _PHRASE_VERBS.items():
@@ -251,28 +297,8 @@ def phrase_swap(sentence: str, **_: Any) -> list[str]:
     for item in phrases():
         candidate = _replace_phrase(sentence, item)
         if candidate and candidate != sentence:
-            swapped = word_swap(candidate)
-            return swapped or [candidate]
+            return [candidate]
     return []
-
-
-def word_swap(sentence: str, **_: Any) -> list[str]:
-    result = sentence
-    for item in words():
-        pattern = re.compile(r"(?<!\w)" + re.escape(item["word"]) + r"(?!\w)", re.IGNORECASE)
-
-        def replace(match: re.Match[str], replacement: str = str(item["replacement"])) -> str:
-            value = inflect.form_of(replacement, match.group(0))
-            if match.group(0)[:1].isupper() and value:
-                value = value[:1].upper() + value[1:]
-            return value
-
-        result = pattern.sub(replace, result)
-    result = re.sub(r"^\s*[,;]\s*", "", result)
-    result = re.sub(r"\s{2,}", " ", result).strip()
-    if result and result[0].isalpha():
-        result = result[0].upper() + result[1:]
-    return [result] if result != sentence else []
 
 
 def synonym(sentence: str, *, seed: str = "", **_: Any) -> list[str]:
@@ -289,12 +315,14 @@ _TRANSFORMS: dict[str, Callable[..., list[str]]] = {
     "some_others_split": some_others_split,
     "merge_shared_subject": merge_shared_subject,
     "passive_active": passive_active,
+    "passive_needed": passive_needed,
+    "triad": triad,
+    "contrast_restatement": contrast_restatement,
     "noun_phrase_verb": noun_phrase_verb,
     "opener": opener,
     "connective": connective,
     "contraction": contraction,
     "phrase_swap": phrase_swap,
-    "word_swap": word_swap,
     "synonym": synonym,
 }
 

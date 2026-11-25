@@ -12,6 +12,8 @@ class HumanizeRequest(BaseModel):
     strength: str = Field(default="medium", max_length=20)
     variation: int = Field(default=0, ge=0, le=1000000)
     clean_invisible: bool = True
+    replace_dashes: bool = True
+    straight_quotes: bool = True
 
 
 class TextRequest(BaseModel):

@@ -1,0 +1,65 @@
+{
+  "positions": {
+    "opening": "Apply only when the phrase starts a sentence.",
+    "closing": "Apply only when the phrase ends a sentence.",
+    "anywhere": "Apply at any point in a sentence."
+  },
+  "phrases": [
+    {
+      "id": "p10",
+      "phrase": "slowly but surely",
+      "replacement": "gradually",
+      "position": "opening",
+      "strength": "strong"
+    },
+    {
+      "id": "p25",
+      "phrase": "when it comes to",
+      "replacement": "for",
+      "position": "opening",
+      "strength": "weak"
+    },
+    {
+      "id": "p26",
+      "phrase": "in order to",
+      "replacement": "to",
+      "position": "anywhere",
+      "strength": "weak"
+    },
+    {
+      "id": "p27",
+      "phrase": "due to the fact that",
+      "replacement": "because",
+      "position": "anywhere",
+      "strength": "weak"
+    },
+    {
+      "id": "p28",
+      "phrase": "has the ability to",
+      "replacement": "can",
+      "position": "anywhere",
+      "strength": "weak"
+    },
+    {
+      "id": "p29",
+      "phrase": "is able to",
+      "replacement": "can",
+      "position": "anywhere",
+      "strength": "weak"
+    },
+    {
+      "id": "p30",
+      "phrase": "a wide range of",
+      "replacement": "many",
+      "position": "anywhere",
+      "strength": "weak"
+    },
+    {
+      "id": "p31",
+      "phrase": "none at all",
+      "replacement": "none",
+      "position": "anywhere",
+      "strength": "weak"
+    }
+  ]
+}

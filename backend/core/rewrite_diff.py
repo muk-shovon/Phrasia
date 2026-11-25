@@ -184,6 +184,7 @@ def diff_from_alignment(alignment: list[dict[str, Any]]) -> list[dict[str, Any]]
         low = bool(pair.get("low_change", False))
         flat = bool(pair.get("flat_rhythm", False))
         pair_risks = set(pair.get("risk_flags") or [])
+        allowed_drop = bool(pair.get("allowed_drop", False))
         a = _tokens(src)
         b = _tokens(out)
         sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
@@ -200,6 +201,8 @@ def diff_from_alignment(alignment: list[dict[str, Any]]) -> list[dict[str, Any]]
                     raw.append({"type": "equal", "text": txt, "original": o, "risk": "none", "low_change": low, "flat_rhythm": flat, "sentence": True})
             else:
                 risk = _risk(o, r, src)
+                if allowed_drop and not r:
+                    risk = "none"
                 if "number" in pair_risks: risk = "number"
                 raw.append({"type": "changed", "original": o, "rewritten": r, "risk": risk, "low_change": low, "flat_rhythm": flat, "sentence": True})
         merged = _merge_changed(raw)

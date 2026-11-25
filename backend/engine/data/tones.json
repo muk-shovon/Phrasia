@@ -1,0 +1,35 @@
+{
+  "rule": "Tone changes voice only. Never invent facts, numbers, names, URLs, quotes, citations or claims.",
+  "tones": {
+    "casual": {
+      "contractions": true,
+      "connectives": ["so", "but", "and", "when", "after"],
+      "phrase_sets": ["everyday words", "short openings", "one plain aside at most"],
+      "note": "Friendly peer voice."
+    },
+    "professional": {
+      "contractions": false,
+      "connectives": ["so", "because", "however", "then"],
+      "phrase_sets": ["clear topic sentences", "plain workplace words", "no buzzwords"],
+      "note": "Direct and polite."
+    },
+    "academic": {
+      "contractions": false,
+      "connectives": ["because", "although", "therefore", "in contrast"],
+      "phrase_sets": ["objective wording", "active verbs", "no bloated filler"],
+      "note": "Readable and exact; keep citations."
+    },
+    "marketing": {
+      "contractions": false,
+      "connectives": ["because", "so", "when"],
+      "phrase_sets": ["short benefit lines", "plain verbs", "no new claims"],
+      "note": "Punchy, using only benefits already in the source."
+    },
+    "storytelling": {
+      "contractions": true,
+      "connectives": ["then", "after", "while", "because"],
+      "phrase_sets": ["concrete detail from the source", "varied sentence length", "no invented scenes"],
+      "note": "Natural narrative flow."
+    }
+  }
+}

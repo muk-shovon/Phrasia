@@ -57,7 +57,7 @@ export interface DetectorPatternGroup {
   id: string;
   name: string;
   hint: string;
-  weight: "strong" | "weak";
+  weight: "strong" | "normal" | "weak";
   count: number;
   matches: DetectorPatternMatch[];
 }
@@ -97,12 +97,10 @@ export interface SentenceRecord {
   status: "restructured" | "lexical" | "unchanged";
   restructured: boolean;
   flags: string[];
+  allowed_drop?: boolean;
 }
 
 export interface StyleCheck {
-  patterns_before: number;
-  patterns_after: number;
-  patterns_removed: number;
   sentences_restructured: number;
   sentences_total: number;
   words_changed_pct: number;
@@ -114,6 +112,36 @@ export interface HumanizePayload {
   strength: string;
   variation: number;
   clean_invisible: boolean;
+  replace_dashes: boolean;
+  straight_quotes: boolean;
+}
+
+export interface SkillSectionReport {
+  section: number;
+  name: string;
+  found: number;
+  fixed: number;
+  survived: number;
+  review: number;
+}
+
+export interface SkillReviewItem {
+  section: number;
+  name: string;
+  snippet: string;
+  hint: string;
+  span: [number, number];
+  tier: "A" | "B" | "C";
+}
+
+export interface SkillReport {
+  found: number;
+  fixed: number;
+  survived: number;
+  sections: SkillSectionReport[];
+  review: SkillReviewItem[];
+  dropped_by_rule: { section: number; id: string; snippet: string }[];
+  reason: string;
 }
 
 export interface HumanizeResult {
@@ -121,5 +149,6 @@ export interface HumanizeResult {
   sentences: SentenceRecord[];
   diff: { segments: DiffSegment[]; changed: number; review: number };
   style_check: StyleCheck;
+  report: SkillReport;
   document_id: number;
 }

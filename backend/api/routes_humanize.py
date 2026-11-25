@@ -1,6 +1,7 @@
 """Synchronous local rewriting plus text and DOCX export."""
 from __future__ import annotations
 
+import difflib
 import re
 from typing import Any
 
@@ -14,19 +15,18 @@ from backend.core import humanizer
 from backend.core.documents import export_docx, safe_filename
 from backend.core.rewrite_diff import diff_from_alignment
 from backend.db import repository
-from backend.engine import ranker
 
 router = APIRouter(prefix="/api", tags=["humanize"], dependencies=[Depends(require_owner)])
 _WORD = re.compile(r"\S+")
 
 
 def _words_changed_pct(original: str, rewritten: str) -> int:
-    source = _WORD.findall(original)
-    result = _WORD.findall(rewritten)
-    changed = abs(len(source) - len(result)) + sum(
-        1 for left, right in zip(source, result) if left.lower() != right.lower()
-    )
-    return round(100 * changed / max(len(source), 1))
+    source = [word.lower() for word in _WORD.findall(original)]
+    result = [word.lower() for word in _WORD.findall(rewritten)]
+    matcher = difflib.SequenceMatcher(None, source, result, autojunk=False)
+    unchanged = sum(block.size for block in matcher.get_matching_blocks())
+    changed = max(len(source), len(result)) - unchanged
+    return min(100, round(100 * changed / max(len(source), 1)))
 
 
 def _title(text: str) -> str:
@@ -43,6 +43,8 @@ async def create_humanization(payload: HumanizeRequest) -> JSONResponse:
             strength=payload.strength,
             variation=payload.variation,
             clean_invisible=payload.clean_invisible,
+            replace_dashes=payload.replace_dashes,
+            straight_quotes=payload.straight_quotes,
         )
     except ValueError as exc:
         raise fail(422, str(exc), "invalid_input") from exc
@@ -55,9 +57,6 @@ async def create_humanization(payload: HumanizeRequest) -> JSONResponse:
         for segment in segments
         if segment.get("type") == "changed" and segment.get("risk") in {"meaning", "number"}
     )
-    before = ranker.pattern_count(payload.text)
-    after = ranker.pattern_count(result["text"])
-
     document_id = repository.create_document(_title(payload.text)[:200])
     repository.add_version(document_id, "source", payload.text)
     repository.add_version(document_id, "humanized", result["text"])
@@ -67,13 +66,11 @@ async def create_humanization(payload: HumanizeRequest) -> JSONResponse:
         "sentences": result["sentences"],
         "diff": {"segments": segments, "changed": changed, "review": review},
         "style_check": {
-            "patterns_before": before,
-            "patterns_after": after,
-            "patterns_removed": max(0, before - after),
             "sentences_restructured": result["summary"]["sentences_restructured"],
             "sentences_total": result["summary"]["sentences_total"],
             "words_changed_pct": _words_changed_pct(payload.text, result["text"]),
         },
+        "report": result["report"],
         "document_id": document_id,
     }
     return JSONResponse(body, media_type="application/json; charset=utf-8")

@@ -1,0 +1,11 @@
+* text=auto
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff2 binary
+
+frontend/dist/** text eol=lf linguist-generated=true whitespace=cr-at-eol
+docs/** linguist-documentation=true
+tests/fixtures/** linguist-vendored=true

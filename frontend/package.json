@@ -2,7 +2,11 @@
   "name": "phrasia-frontend",
   "private": true,
   "version": "0.2.0",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite",
     "typecheck": "tsc --noEmit",

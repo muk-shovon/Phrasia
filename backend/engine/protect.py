@@ -7,7 +7,10 @@ from dataclasses import dataclass
 _URL = r"(?:https?|ftp)://[^\s<>\"']+|www\.[^\s<>\"']+"
 _EMAIL = r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
 _CITATION = r"\[\d+[\d,\s]*(?:;[\d,\s]*)*\]"
-_MEASURE = r"\d+(?:[.,]\d+)?\s*(?:%|kg|km|cm|mm|m|s|ms|hours?|days?|weeks?|months?|years?|USD|\$|€|£)"
+_MEASURE = (
+    r"\b\d+(?:[.,]\d+)?\s*"
+    r"(?:%|kg|km|cm|mm|ms|seconds?|minutes?|hours?|days?|weeks?|months?|years?|USD|\$|€|£|m|s)(?!\w)"
+)
 _QUOTE = r"\"[^\"\n]{3,}\"|“[^”\n]{3,}”"
 _PATTERN = re.compile(
     r"```[\s\S]*?```|`[^`\n]+`|" + _URL + "|" + _EMAIL + "|" + _CITATION + "|" + _MEASURE + "|" + _QUOTE,

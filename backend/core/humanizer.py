@@ -14,6 +14,8 @@ def humanize(
     strength: str = "medium",
     variation: int = 0,
     clean_invisible: bool = True,
+    replace_dashes: bool = True,
+    straight_quotes: bool = True,
 ) -> dict[str, Any]:
     """Rewrite text locally and return engine sentences plus API-shaped alignment."""
     if not text or not text.strip():
@@ -31,6 +33,8 @@ def humanize(
         variation=variation,
         preserve_formatting=True,
         clean_invisible=clean_invisible,
+        replace_dashes=replace_dashes,
+        straight_quotes=straight_quotes,
     )
     alignment: list[dict[str, Any]] = []
     for record in result["records"]:
@@ -44,10 +48,12 @@ def humanize(
             "restructured": record["restructured"],
             "unchanged": record["status"] == "unchanged",
             "similarity": record["similarity"],
+            "allowed_drop": bool(record.get("allowed_drop", False)),
         })
     return {
         "text": result["text"],
         "sentences": result["records"],
         "alignment": alignment,
         "summary": result["summary"],
+        "report": result["report"],
     }

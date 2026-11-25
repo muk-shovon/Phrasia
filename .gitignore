@@ -1,31 +1,18 @@
-# Python virtual environment (recreate with pip install -r requirements.txt)
 .venv/
 venv/
 env/
-
-# Generated Python state
 __pycache__/
 *.py[cod]
 .pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Generated frontend state
+*.egg-info/
 node_modules/
-frontend/dist/
-*.tsbuildinfo
-
-# Local data and logs
-data/
-*.db
-*.db-wal
-*.db-shm
+/data/
+.env
 *.log
-backend/engine/data/lm.json
-
-# Generated editor/OS files
-.vscode/
 .idea/
+.vscode/
 .DS_Store
 Thumbs.db
-desktop.ini
+coverage/
+*.sqlite
+*.db

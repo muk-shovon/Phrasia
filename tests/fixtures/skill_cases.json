@@ -1,0 +1,117 @@
+[
+  {
+    "id": "s8-dashes",
+    "section": 8,
+    "tier": "A",
+    "mode": "exact",
+    "before": "The new policy — announced without warning — affects thousands of workers. The changes -- long overdue according to critics -- will take effect immediately.",
+    "after": "The new policy, announced without warning, affects thousands of workers. The changes, long overdue according to critics, will take effect immediately."
+  },
+  {
+    "id": "s10-hyphens",
+    "section": 10,
+    "tier": "A",
+    "mode": "exact",
+    "before": "The report is high-quality, the process is well-documented, and the plan is long-term.",
+    "after": "The report is high quality, the process is well documented, and the plan is long term."
+  },
+  {
+    "id": "s18-simple-verbs",
+    "section": 18,
+    "tier": "A",
+    "mode": "exact",
+    "before": "Gallery 825 serves as LAAA's exhibition space for contemporary art. The gallery features four separate spaces and boasts over 3,000 square feet.",
+    "after": "Gallery 825 is LAAA's exhibition space for contemporary art. It has four separate spaces and more than 3,000 square feet."
+  },
+  {
+    "id": "s19-bold",
+    "section": 19,
+    "tier": "A",
+    "mode": "exact",
+    "before": "It blends **OKRs (Objectives and Key Results)**, **KPIs (Key Performance Indicators)**, and visual strategy tools such as the **Business Model Canvas (BMC)** and **Balanced Scorecard (BSC)**.",
+    "after": "It blends OKRs, KPIs, and visual strategy tools like the Business Model Canvas and Balanced Scorecard."
+  },
+  {
+    "id": "s21-quotes-clustered",
+    "section": 21,
+    "tier": "A",
+    "mode": "exact",
+    "before": "He said “the project is on track” but others disagreed. Great question! The result is pivotal.",
+    "after": "He said \"the project is on track\" but others disagreed. The result is important."
+  },
+  {
+    "id": "s22-chat-wrapper",
+    "section": 22,
+    "tier": "A",
+    "mode": "exact",
+    "before": "Great question! Here is an overview of the French Revolution. It began in 1789 when a financial crisis and food shortages led to widespread unrest. I hope this helps! Let me know if you'd like me to expand on any section.",
+    "after": "The French Revolution began in 1789 when a financial crisis and food shortages led to widespread unrest."
+  },
+  {
+    "id": "s24-heading-echo",
+    "section": 24,
+    "tier": "A",
+    "mode": "exact",
+    "before": "## Performance\n\nSpeed matters.\n\nWhen users hit a slow page, they leave.",
+    "after": "## Performance\n\nWhen users hit a slow page, they leave."
+  },
+  {
+    "id": "s2-repeated-closer",
+    "section": 2,
+    "tier": "A",
+    "mode": "exact",
+    "before": "Caching cuts repeat work.\n\nThat is the real win.\n\nRetries hide brief outages.\n\nThat is the real win.",
+    "after": "Caching cuts repeat work.\n\nRetries hide brief outages."
+  },
+  {
+    "id": "s1-direct-contrast",
+    "section": 1,
+    "tier": "A",
+    "mode": "gone",
+    "before": "The tool is not only fast but also reliable.",
+    "preserve": ["tool", "fast", "reliable"]
+  },
+  {
+    "id": "s7-repeated-openings",
+    "section": 7,
+    "tier": "B",
+    "mode": "pipeline",
+    "before": "She noted the door. She noted the lock on it. She filed both away.",
+    "preserve": ["door", "lock", "filed"]
+  },
+  {
+    "id": "s3-aphorism",
+    "section": 3,
+    "tier": "C",
+    "mode": "review",
+    "before": "Symmetry is the language of trust."
+  },
+  {
+    "id": "s14-vague-link",
+    "section": 14,
+    "tier": "C",
+    "mode": "review",
+    "before": "He is associated with the Rajhans Orchestra."
+  },
+  {
+    "id": "informal-register",
+    "section": 12,
+    "tier": "A",
+    "mode": "informal",
+    "before": "ugh btw this is robust lol"
+  },
+  {
+    "id": "protected-contexts",
+    "section": 22,
+    "tier": "A",
+    "mode": "protected",
+    "before": "The phrase \"great question\" appears in `notes -- old.md`."
+  },
+  {
+    "id": "weak-alone",
+    "section": 10,
+    "tier": "A",
+    "mode": "weak",
+    "before": "The report is high-quality."
+  }
+]

@@ -6,7 +6,7 @@ import re
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from backend.engine import sentences
 from backend.engine.lexicon import (
@@ -27,12 +27,34 @@ _URL = re.compile(r"(?:https?://|www\.)[^\s<>\"']+|[A-Za-z0-9._%+-]+@[A-Za-z0-9.
 _PLACEHOLDER = re.compile(r"\[PHRASIA_[A-Z_]+\d*\]")
 _WORD = re.compile(r"[A-Za-z0-9']+")
 _NAME = re.compile(r"\b[A-Z][A-Za-z]+\b")
+_NAME_STOP = {
+    "A", "An", "At", "Because", "For", "From", "Fundamentally", "He", "Heads",
+    "Here", "Honestly", "However", "I", "In", "It", "Its", "Let", "Look", "No", "Now",
+    "Overall", "Quick", "Real", "She", "That", "The", "Their", "There", "These", "They",
+    "This", "Those", "Through", "To", "Ultimately", "We", "When", "Where", "While",
+    "With", "Without", "You",
+}
 _DOUBLE = re.compile(r"\b(\w+)\s+\1\b", re.IGNORECASE)
 _TERMINAL = re.compile(r"[.!?…][\"'”’)\]]*$")
 _WORDS_PATH = Path(__file__).resolve().parent / "data" / "words.json"
 _CONTENT_THRESHOLD = 0.9
 _LENGTH_MIN = 0.8
 _LENGTH_MAX = 1.2
+_EDIT_NORMALIZATIONS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"\b(?:serves|stands|functions|operates)\s+as\b", re.I), "is"),
+    (re.compile(r"\b(?:served|stood|functioned|operated)\s+as\b", re.I), "was"),
+    (re.compile(r"\b(?:boasts|features|offers|maintains)\b", re.I), "has"),
+    (re.compile(r"\bthe real question is\b", re.I), "the question is"),
+    (re.compile(r"\bwhat really matters is\b", re.I), "what matters is"),
+    (re.compile(r"\bthe deeper issue is\b", re.I), "the issue is"),
+    (re.compile(r"\b(?:could potentially)\b", re.I), "could"),
+    (re.compile(r"\b(?:might arguably)\b", re.I), "might"),
+    (re.compile(r"\b(?:may possibly)\b", re.I), "may"),
+    (re.compile(r"\bnestled (?:within|in)\b", re.I), "in"),
+    (re.compile(r"\bin the heart of\b", re.I), "in"),
+    (re.compile(r"\brenowned\b", re.I), "well known"),
+    (re.compile(r"\bexemplifies\b", re.I), "shows"),
+)
 
 
 @lru_cache(maxsize=1)
@@ -43,6 +65,14 @@ def _banned_map() -> tuple[tuple[str, str], ...]:
 
 def _normalise(text: str) -> str:
     result = text or ""
+    result = re.sub(
+        r"\bno\s+([A-Za-z][\w -]{1,50}?)\s+(?:is\s+|are\s+)?needed\b",
+        r"not need \1",
+        result,
+        flags=re.IGNORECASE,
+    )
+    for pattern, replacement in _EDIT_NORMALIZATIONS:
+        result = pattern.sub(replacement, result)
     for banned, replacement in _banned_map():
         if not replacement:
             result = re.sub(r"(?<!\w)" + re.escape(banned) + r"(?!\w)", "", result, flags=re.IGNORECASE)
@@ -79,7 +109,13 @@ def preserve_critical(source: str, candidate: str) -> bool:
         if number not in _NUMBER.findall(candidate_n):
             return False
     for match in _NAME.finditer(source):
-        if match.start() == 0:
+        if match.group(0) in _NAME_STOP:
+            continue
+        prefix = source[:match.start()].rstrip()
+        at_sentence_start = not prefix or prefix.endswith((".", "!", "?", "\n"))
+        if at_sentence_start and re.search(
+            rf"(?<!\w){re.escape(match.group(0))}(?!\w)", candidate, re.IGNORECASE
+        ):
             continue
         if match.group(0) not in candidate:
             return False
@@ -97,8 +133,27 @@ def preserve_critical(source: str, candidate: str) -> bool:
     return True
 
 
-def content_retention(source: str, candidate: str) -> float:
+def _remove_exemptions(source: str, dropped_by_rule: Iterable[str]) -> str:
+    result = source
+    for dropped in dropped_by_rule:
+        if not dropped:
+            continue
+        start = result.find(dropped)
+        if start >= 0:
+            result = result[:start] + result[start + len(dropped):]
+            continue
+        result = re.sub(re.escape(dropped), "", result, count=1, flags=re.IGNORECASE)
+    return result
+
+
+def content_retention(
+    source: str,
+    candidate: str,
+    *,
+    dropped_by_rule: Iterable[str] = (),
+) -> float:
     """Fraction of source content words still present in the candidate."""
+    source = _remove_exemptions(source, dropped_by_rule)
     src = [word for word in _words(_normalise(source)) if is_content(word)]
     out = _counts(_words(_normalise(candidate)))
     if not src:
@@ -152,17 +207,24 @@ def length_ratio(source: str, candidate: str) -> float:
     return round(len(_words(candidate)) / source_len, 3)
 
 
-def validate(source: str, candidate: str) -> tuple[bool, list[str]]:
+def validate(
+    source: str,
+    candidate: str,
+    *,
+    dropped_by_rule: Iterable[str] = (),
+    length_min: float = _LENGTH_MIN,
+    length_max: float = _LENGTH_MAX,
+) -> tuple[bool, list[str]]:
     """Return (ok, reasons) for a candidate rewrite of one source unit."""
     reasons: list[str] = []
     if not preserve_critical(source, candidate):
         reasons.append("critical")
-    if content_retention(source, candidate) < _CONTENT_THRESHOLD:
+    if content_retention(source, candidate, dropped_by_rule=dropped_by_rule) < _CONTENT_THRESHOLD:
         reasons.append("content")
     if not grammar_sanity(candidate):
         reasons.append("grammar")
     ratio = length_ratio(source, candidate)
-    if ratio < _LENGTH_MIN or ratio > _LENGTH_MAX:
+    if ratio < length_min or ratio > length_max:
         reasons.append("length")
     return (not reasons), reasons
 

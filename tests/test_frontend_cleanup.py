@@ -21,3 +21,12 @@ def test_no_inner_html_in_humanizer() -> None:
     source = (ROOT / "pages" / "humanize.ts").read_text(encoding="utf-8")
     assert "innerHTML" not in source
     assert re.search(r"h-56 md:h-64", source)
+
+
+def test_humanizer_exposes_skill_report_and_options() -> None:
+    source = (ROOT / "pages" / "humanize.ts").read_text(encoding="utf-8")
+    for label in (
+        "Tells found", "Needs review", "Replace dashes", "Straight quotes", "More options",
+        "decoration-violet-500", "scrollIntoView",
+    ):
+        assert label in source

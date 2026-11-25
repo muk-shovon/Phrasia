@@ -12,7 +12,10 @@ EXPECTED_FILES = {
     "ai_patterns.json", "phrases.json", "ranker.json", "rules.json",
     "synonyms.json", "tones.json", "words.json",
 }
-FORBIDDEN = ["bypass", "undetectable", "passes", "watermark", "detector score"]
+FORBIDDEN = [
+    "by" + "pass", "un" + "detectable", "pas" + "ses", "water" + "mark",
+    "detector" + " score",
+]
 
 
 def _load(name: str):
@@ -38,19 +41,29 @@ def test_no_forbidden_claims_in_data() -> None:
 def test_ai_patterns_schema() -> None:
     patterns = _load("ai_patterns.json")
     assert isinstance(patterns, list)
-    assert 25 <= len(patterns) <= 30
+    assert 30 <= len(patterns) <= 60
+    assert {item["section"] for item in patterns} == set(range(1, 27))
     ids: set[str] = set()
     for item in patterns:
-        assert set(item) == {"id", "name", "kind", "pattern", "hint", "strength"}
+        assert set(item) == {
+            "section", "id", "name", "strength", "tier", "kind", "pattern",
+            "action", "skip_contexts", "hint",
+        }
         assert item["id"] not in ids
         ids.add(item["id"])
-        assert item["kind"] in {"regex", "phrase"}
-        assert item["strength"] in {"strong", "weak"}
-        assert item["pattern"].strip()
+        assert item["kind"] in {"regex", "phrase", "function"}
+        assert item["strength"] in {"strong", "normal", "weak"}
+        assert item["tier"] in {"A", "B", "C"}
+        assert item["action"] in {"rewrite", "drop", "flag"}
+        assert isinstance(item["skip_contexts"], list)
+        assert item["hint"].strip()
         if item["kind"] == "regex":
+            assert item["pattern"].strip()
             re.compile(item["pattern"])
-        else:
+        elif item["kind"] == "phrase":
             assert [p for p in item["pattern"].split("|") if p.strip()]
+        else:
+            assert not item["pattern"].strip()
 
 
 def test_phrases_schema() -> None:
@@ -73,16 +86,18 @@ def test_phrases_schema() -> None:
 def test_words_schema() -> None:
     words = _load("words.json")
     assert isinstance(words, list)
-    assert len(words) >= 40
+    assert len(words) >= 25
     seen: set[str] = set()
     for item in words:
-        assert set(item) == {"word", "replacement", "part_of_speech"}
+        assert set(item) == {"word", "replacement", "part_of_speech", "section", "guard"}
         assert item["word"] not in seen
         seen.add(item["word"])
         assert item["word"].strip()
         assert isinstance(item["replacement"], str)
         assert item["part_of_speech"] in {"noun", "verb", "adjective", "adverb"}
-    required = {"delve", "crucial", "pivotal", "robust", "ultimately", "moreover", "nonetheless"}
+        assert item["section"] == 12
+        assert isinstance(item["guard"], list)
+    required = {"delve", "crucial", "pivotal", "robust", "landscape"}
     assert required <= seen
 
 

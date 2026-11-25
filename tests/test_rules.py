@@ -12,6 +12,7 @@ def _apply(rule_id: str, sentence: str, **context: object) -> list[str]:
 
 
 CASES = [
+    ("skill-contrast-restatement", "It's not a long delay, it's a short delay.", "The delay is short."),
     ("move-lead-to-end", "Through digital tools, employees can share notes.", "Employees can share notes through digital tools.", "Employees share notes."),
     ("front-adverb", "They should also share notes.", "Also, they should share notes.", "They share notes."),
     ("move-relative-to-front", "Managers need a plan where employees feel heard.", "Where employees feel heard, managers need a plan.", "Managers need a plan."),
@@ -24,8 +25,9 @@ CASES = [
     ("opener", "In order to finish, the team worked late.", "To finish, the team worked late.", "The team worked late."),
     ("connective", "Furthermore, the plan worked.", "the plan worked.", "The plan worked."),
     ("contraction", "It is clear.", "It's clear.", "It is clear.", {"tone": "academic"}),
-    ("phrase-swap", "Furthermore, this is clear.", "this is clear.", "This is clear."),
-    ("word-swap", "This is crucial.", "This is important.", "This is fine."),
+    ("phrase-swap", "They worked in order to finish.", "They rested."),
+    ("skill-triad", "The plan covers speed, safety, and cost.", "The plan covers speed and cost."),
+    ("skill-passive-needed", "No configuration file needed.", "The file is ready."),
     ("synonym", "This is important.", "This is key.", "This is fine.", {"seed": "abc"}),
 ]
 

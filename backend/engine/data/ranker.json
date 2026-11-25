@@ -1,0 +1,13 @@
+{
+  "weights": {
+    "structural_distance": 2.0,
+    "rhythm_fit": 1.0,
+    "pattern_reduction": 1.2,
+    "length_window": 0.8,
+    "rule_risk": 1.5,
+    "repeated_opening": 1.0,
+    "fluency": 0.0,
+    "status_bonus": 0.5
+  },
+  "risk_penalty": { "low": 0.0, "medium": 0.35, "high": 0.6 }
+}

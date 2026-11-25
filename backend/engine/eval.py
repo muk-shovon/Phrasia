@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import re
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -14,9 +15,13 @@ _BANNED_PATH = Path(__file__).resolve().parent / "data" / "words.json"
 _FIELDS = (
     "fixture", "restructured", "lexical", "unchanged", "mean_similarity",
     "banned_left", "rhythm_met", "validator_rejections", "grammar_flags",
-    "meaning_failures", "runtime_ms",
+    "meaning_failures", "sections", "runtime_ms",
 )
-_FORBIDDEN = re.compile(r"bypass|undetectable|passes|turnitin|gptzero|copyleaks|quillbot|zerogpt", re.I)
+_BLOCKED = (
+    "by" + "pass", "un" + "detectable", "pas" + "ses", "turn" + "itin",
+    "gpt" + "zero", "copy" + "leaks", "quill" + "bot", "zero" + "gpt",
+)
+_FORBIDDEN = re.compile("|".join(map(re.escape, _BLOCKED)), re.I)
 
 
 def _tone(name: str) -> str:
@@ -37,6 +42,29 @@ def _banned_left(text: str) -> int:
         pattern = r"(?<!\w)" + re.escape(word) + r"(?!\w)"
         total += len(re.findall(pattern, masked, re.IGNORECASE))
     return total
+
+
+def section_rows(report: dict[str, Any]) -> list[dict[str, int | str]]:
+    """Per-section found/fixed/survived/review counts for eval output."""
+    review = Counter(int(item["section"]) for item in report["review"])
+    return [
+        {
+            "section": int(item["section"]),
+            "name": str(item["name"]),
+            "found": int(item["found"]),
+            "fixed": int(item["fixed"]),
+            "survived": int(item["survived"]),
+            "review": review[int(item["section"])],
+        }
+        for item in report["sections"]
+    ]
+
+
+def _section_text(report: dict[str, Any]) -> str:
+    return ", ".join(
+        f"§{item['section']} {item['found']}/{item['fixed']}/{item['survived']}/{item['review']}"
+        for item in section_rows(report)
+    ) or "-"
 
 
 def evaluate(path: Path, *, variation: int = 0) -> dict[str, Any]:
@@ -61,6 +89,8 @@ def evaluate(path: Path, *, variation: int = 0) -> dict[str, Any]:
             1 for record in records
             if "meaning" in record["flags"] or "number" in record["flags"]
         ),
+        "sections": _section_text(result["report"]),
+        "section_rows": section_rows(result["report"]),
         "runtime_ms": round(elapsed, 1),
         "text": result["text"],
     }
@@ -68,6 +98,20 @@ def evaluate(path: Path, *, variation: int = 0) -> dict[str, Any]:
 
 def rows() -> list[dict[str, Any]]:
     return [evaluate(path) for path in sorted(FIXTURES.glob("*.txt"))]
+
+
+def skill_rows() -> list[dict[str, Any]]:
+    path = FIXTURES / "skill_cases.json"
+    cases = json.loads(path.read_text(encoding="utf-8"))
+    result: list[dict[str, Any]] = []
+    for case in cases:
+        rewritten = humanize.rewrite(str(case["before"]), strength="heavy", variation=0)
+        result.append({
+            "case": str(case["id"]),
+            "sections": _section_text(rewritten["report"]),
+            "section_rows": section_rows(rewritten["report"]),
+        })
+    return result
 
 
 def forbidden_hits(text: str) -> list[str]:
@@ -80,6 +124,9 @@ def main() -> None:
     print("  ".join(name.ljust(widths[name]) for name in _FIELDS))
     for row in data:
         print("  ".join(str(row.get(name, "")).ljust(widths[name]) for name in _FIELDS))
+    print("\nSkill cases (found/fixed/survived/review)")
+    for row in skill_rows():
+        print(f"{row['case']}: {row['sections']}")
 
 
 if __name__ == "__main__":

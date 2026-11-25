@@ -1,11 +1,16 @@
 """Deterministic sentence rewriting using our own rules and ranker."""
 from __future__ import annotations
 
+import difflib
 import re
+from collections import Counter
 from hashlib import sha256
 from typing import Any
 
 from backend.engine import assemble, blocks, clean, plan, protect, ranker, rules, sentences, validators
+from backend.engine.skill import apply_skill
+from backend.engine.skill import scan as skill_scan
+from backend.engine.skill.apply import build_report
 
 _WORD = re.compile(r"[A-Za-z0-9']+")
 _NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
@@ -32,6 +37,105 @@ def _status(safety: str, rule_id: str) -> str:
     return "restructured"
 
 
+def _introduces_tell(source: str, candidate: str, options: dict[str, Any]) -> bool:
+    before = Counter(tell["id"] for tell in skill_scan.scan(source, options))
+    after = Counter(tell["id"] for tell in skill_scan.scan(candidate, options))
+    return any(count > before.get(tell_id, 0) for tell_id, count in after.items())
+
+
+def _validation_source(rule_id: str, source: str) -> str:
+    if rule_id != "skill-contrast-restatement":
+        return source
+    match = re.search(
+        r"[,;]\s*((?:it|this|that)(?:'s| is)\s+[^.!?]{2,90}[.!?])$",
+        source,
+        re.IGNORECASE,
+    )
+    if not match:
+        return source
+    value = match.group(1)
+    return value[:1].upper() + value[1:]
+
+
+def _sentence_key(value: str) -> str:
+    return " ".join(word.lower() for word in _WORD.findall(value))
+
+
+def _pieces(text: str) -> list[str]:
+    """Sentence contents in block order, without bullet markers or labels."""
+    out: list[str] = []
+    for block in blocks.parse(text):
+        body = block.body if block.label and block.body else block.text
+        out.extend(sentences.texts(body))
+    return out
+
+
+def _group_pairs(left: list[str], right: list[str]) -> list[tuple[list[tuple[int, str]], str]]:
+    matcher = difflib.SequenceMatcher(
+        None, [_sentence_key(item) for item in left], [_sentence_key(item) for item in right],
+        autojunk=False,
+    )
+    groups: list[tuple[list[tuple[int, str]], str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            groups.extend(
+                ([(i1 + k + 1, left[i1 + k])], right[j1 + k]) for k in range(i2 - i1)
+            )
+            continue
+        sources = list(enumerate(left[i1:i2], start=i1 + 1))
+        outputs = right[j1:j2]
+        if not outputs:
+            groups.append((sources, ""))
+        elif not sources:
+            groups.extend(([], output) for output in outputs)
+        elif len(outputs) == 1:
+            groups.append((sources, outputs[0]))
+        else:
+            groups.extend(([source], output) for source, output in zip(sources[:len(outputs)], outputs))
+            groups.extend(([source], "") for source in sources[len(outputs):])
+            groups.extend(([], output) for output in outputs[len(sources):])
+
+    merged: list[tuple[list[tuple[int, str]], str]] = []
+    for sources, output in groups:
+        if not sources and output and merged:
+            previous_sources, previous_output = merged[-1]
+            merged[-1] = (previous_sources, f"{previous_output} {output}".strip())
+            continue
+        merged.append((sources, output))
+    return merged
+
+
+def _realign(
+    source: str,
+    final: str,
+    dropped_by_rule: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Pair source sentences with the final sentences they became."""
+    left = _pieces(source)
+    right = _pieces(final)
+    dropped = {" ".join(str(item["snippet"]).split()) for item in (dropped_by_rule or [])}
+    records: list[dict[str, Any]] = []
+    for sources, output in _group_pairs(left, right):
+        output = output.strip()
+        source_text = " ".join(item.strip() for _index, item in sources if item.strip())
+        ids = [index for index, item in sources if item.strip()]
+        similarity = ranker.similarity(source_text, output) if source_text and output else 0.0
+        status = "unchanged" if not source_text or source_text == output else "restructured"
+        allowed_drop = not output and " ".join(source_text.split()) in dropped
+        records.append({
+            "source_ids": ids or [len(records) + 1],
+            "source": source_text,
+            "text": output,
+            "rules": [],
+            "similarity": similarity,
+            "status": status,
+            "restructured": status == "restructured",
+            "flags": _flags(source_text, output, similarity) if source_text else [],
+            "allowed_drop": allowed_drop,
+        })
+    return records
+
+
 def rewrite(
     text: str,
     *,
@@ -40,6 +144,8 @@ def rewrite(
     variation: int = 0,
     preserve_formatting: bool = True,
     clean_invisible: bool = True,
+    replace_dashes: bool = True,
+    straight_quotes: bool = True,
 ) -> dict[str, Any]:
     """Rewrite text locally, returning the result and per-sentence records."""
     raw = text or ""
@@ -47,8 +153,28 @@ def rewrite(
     if not source_text.strip():
         raise ValueError("Text is empty.")
     seed = sha256(f"{source_text}|{variation}".encode("utf-8")).hexdigest()
-    parsed = blocks.parse(source_text)
+    options = {"replace_dashes": replace_dashes, "straight_quotes": straight_quotes}
+    found = skill_scan.scan(source_text, options)
+    source_blocks = blocks.parse(source_text)
+    prepared, skill_report = apply_skill(
+        assemble.assemble(source_blocks), options, found=found
+    )
+    parsed = blocks.parse(prepared)
     available = rules.available(strength=strength, tone=tone)
+    prepared_ids = {tell["id"] for tell in found} | {
+        tell["id"] for tell in skill_scan.scan(prepared, options)
+    }
+    available = [
+        rule for rule in available
+        if not (
+            (rule["id"] == "skill-triad" and "triad-sentence" not in prepared_ids)
+            or (rule["id"] == "skill-passive-needed" and "passive-needed" not in prepared_ids)
+            or (rule["id"] == "skill-contrast-restatement" and "contrast-restatement" not in prepared_ids)
+            or (rule["id"] == "passive-active" and "passive-by" not in prepared_ids)
+        )
+    ]
+    if skill_report["reason"] == "informal register":
+        available = []
     records: list[dict[str, Any]] = []
     block_texts: list[str] = []
 
@@ -98,8 +224,13 @@ def rewrite(
                     if restored is None:
                         continue
                     validation_source = joined_preview if rule["id"] == "merge-shared-subject" else core
-                    ok, _reasons = validators.validate(validation_source, restored)
-                    if not ok:
+                    validation_source = _validation_source(str(rule["id"]), validation_source)
+                    ok, _reasons = validators.validate(
+                        validation_source,
+                        restored,
+                        length_max=1.8 if rule["id"] == "skill-passive-needed" else 1.2,
+                    )
+                    if not ok or _introduces_tell(validation_source, restored, options):
                         continue
                     status = _status(str(rule["safety"]), str(rule["id"]))
                     candidates.append((restored, str(rule["id"]), status, validation_source))
@@ -134,18 +265,6 @@ def rewrite(
 
             final_text = best_text
             applied_rules = [] if best_rule == "unchanged" else [best_rule]
-            if final_text != core:
-                post_masked, post_spans = protect.extract(final_text)
-                swapped = rules.apply(
-                    next(item for item in rules.rules() if item["id"] == "word-swap"),
-                    post_masked,
-                )
-                if swapped:
-                    restored = protect.restore(swapped[0], post_spans)
-                    if restored is not None and validators.validate(core, restored)[0]:
-                        final_text = restored
-                        if "word-swap" not in applied_rules:
-                            applied_rules.append("word-swap")
 
             joined_source = core
             if best_rule == "merge-shared-subject" and index + 1 < len(pieces):
@@ -155,7 +274,11 @@ def rewrite(
                 source_ids.append(source_ids[0] + 1)
                 skipped.add(index + 1)
                 trailing = following[len(next_core):]
-            if not validators.validate(joined_source, final_text)[0]:
+            if not validators.validate(
+                _validation_source(best_rule, joined_source),
+                final_text,
+                length_max=1.8 if best_rule == "skill-passive-needed" else 1.2,
+            )[0]:
                 joined_source = core
                 source_ids = source_ids[:1]
                 skipped.discard(index + 1)
@@ -182,14 +305,25 @@ def rewrite(
         else:
             block_texts.append(new_working)
 
-    result = assemble.assemble(parsed, block_texts)
+    final_text = assemble.assemble(parsed, block_texts)
+    remaining = skill_scan.survivors(final_text, found, options)
+    report = build_report(
+        source_text,
+        final_text,
+        found,
+        remaining,
+        dropped_by_rule=skill_report["dropped_by_rule"],
+        reason=skill_report["reason"],
+    )
+    records = _realign(source_text, final_text, skill_report["dropped_by_rule"])
     restructured = sum(1 for record in records if record["status"] == "restructured")
     lexical = sum(1 for record in records if record["status"] == "lexical")
     unchanged = sum(1 for record in records if record["status"] == "unchanged")
     scores = [float(record["similarity"]) for record in records]
     return {
-        "text": result,
+        "text": final_text,
         "records": records,
+        "report": report,
         "summary": {
             "sentences_total": len(records),
             "sentences_restructured": restructured,

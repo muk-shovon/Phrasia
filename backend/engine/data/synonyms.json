@@ -1,0 +1,16 @@
+{
+  "density_cap_per_sentence": 1,
+  "density_cap_per_paragraph": 2,
+  "entries": {
+    "important": { "pos": "adjective", "replacements": ["key", "main"] },
+    "common": { "pos": "adjective", "replacements": ["usual", "everyday"] },
+    "help": { "pos": "verb", "replacements": ["aid", "assist"] },
+    "show": { "pos": "verb", "replacements": ["display", "present"] },
+    "use": { "pos": "verb", "replacements": ["apply", "employ"] },
+    "change": { "pos": "verb", "replacements": ["adjust", "alter"] },
+    "detail": { "pos": "noun", "replacements": ["fact", "point"] },
+    "field": { "pos": "noun", "replacements": ["area", "domain"] },
+    "strong": { "pos": "adjective", "replacements": ["firm", "solid"] },
+    "clear": { "pos": "adjective", "replacements": ["plain", "direct"] }
+  }
+}
