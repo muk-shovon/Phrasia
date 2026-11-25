@@ -1,3 +1,8 @@
+# Python virtual environment (recreate with pip install -r requirements.txt)
+.venv/
+venv/
+env/
+
 # Generated Python state
 __pycache__/
 *.py[cod]
