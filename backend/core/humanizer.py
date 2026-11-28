@@ -1,10 +1,12 @@
-"""Public humanize wrapper around the local deterministic engine."""
+"""Public humanize wrapper around the online-first engine."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
 from backend.config import MAX_WORDS_PER_REQUEST
 from backend.engine import humanize as engine
+
+Progress = Callable[[str, int, int, str], None]
 
 
 def humanize(
@@ -16,8 +18,13 @@ def humanize(
     clean_invisible: bool = True,
     replace_dashes: bool = True,
     straight_quotes: bool = True,
+    intensity: str | None = None,
+    provider: str = "auto",
+    mode: str = "auto",
+    offline_fallback: bool = True,
+    on_progress: Progress | None = None,
 ) -> dict[str, Any]:
-    """Rewrite text locally and return engine sentences plus API-shaped alignment."""
+    """Rewrite text and return engine sentences plus API-shaped alignment."""
     if not text or not text.strip():
         raise ValueError("Text is empty.")
     words = len(text.split())
@@ -35,6 +42,11 @@ def humanize(
         clean_invisible=clean_invisible,
         replace_dashes=replace_dashes,
         straight_quotes=straight_quotes,
+        intensity=intensity,
+        provider=provider,
+        mode=mode,
+        offline_fallback=offline_fallback,
+        on_progress=on_progress,
     )
     alignment: list[dict[str, Any]] = []
     for record in result["records"]:
@@ -56,4 +68,29 @@ def humanize(
         "alignment": alignment,
         "summary": result["summary"],
         "report": result["report"],
+        "meta": result.get("meta", {"mode": "offline"}),
     }
+
+
+def humanize_sentence(
+    text: str,
+    *,
+    tone: str = "casual",
+    strength: str = "medium",
+    provider: str = "auto",
+    replace_dashes: bool = True,
+    straight_quotes: bool = True,
+) -> dict[str, Any]:
+    """Re-humanize one flagged sentence instead of the whole document."""
+    if not text or not text.strip():
+        raise ValueError("Text is empty.")
+    if len(text.split()) > 200:
+        raise ValueError("Re-humanize works on one sentence or a short passage.")
+    return engine.rewrite_sentence(
+        text,
+        tone=tone,
+        strength=strength,
+        provider=provider,
+        replace_dashes=replace_dashes,
+        straight_quotes=straight_quotes,
+    )

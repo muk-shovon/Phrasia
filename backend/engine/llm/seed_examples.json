@@ -1,0 +1,92 @@
+[
+  {
+    "tone": "casual",
+    "strength": "light",
+    "operation": "punchy",
+    "source_text": "The team was nervous about the launch — but the first week went smoothly.",
+    "rewritten_text": "The team was nervous about the launch, but the first week went smoothly.",
+    "score_before": 3.1,
+    "score_after": 0.4
+  },
+  {
+    "tone": "casual",
+    "strength": "medium",
+    "operation": "split",
+    "source_text": "Let's dive in: caching is crucial because it saves time. It's not just faster, it's cheaper too.",
+    "rewritten_text": "Caching saves time and money. A cached response costs less than a fresh one.",
+    "score_before": 5.4,
+    "score_after": 0.6
+  },
+  {
+    "tone": "professional",
+    "strength": "light",
+    "operation": "synonym",
+    "source_text": "We need to leverage our existing data in order to improve the onboarding process.",
+    "rewritten_text": "We need to use our existing data to improve onboarding.",
+    "score_before": 2.8,
+    "score_after": 0.5
+  },
+  {
+    "tone": "professional",
+    "strength": "medium",
+    "operation": "clause",
+    "source_text": "Furthermore, the report highlights three areas: cost, speed, and reliability. Overall, these findings are crucial for the next quarter.",
+    "rewritten_text": "The report also names three areas: cost, speed, and reliability. These findings matter for next quarter.",
+    "score_before": 4.6,
+    "score_after": 0.7
+  },
+  {
+    "tone": "academic",
+    "strength": "medium",
+    "operation": "opening",
+    "source_text": "The study delves into the relationship between sleep and memory. It could potentially suggest that short naps may improve recall.",
+    "rewritten_text": "The study examines how sleep relates to memory. Its results suggest that short naps might improve recall.",
+    "score_before": 3.9,
+    "score_after": 0.6
+  },
+  {
+    "tone": "academic",
+    "strength": "heavy",
+    "operation": "synonym",
+    "source_text": "This paper serves as an exploration of the topic. The findings underscore the importance of context, and they offer a nuanced perspective.",
+    "rewritten_text": "This paper explores the topic. The findings show that context matters and complicate a single explanation.",
+    "score_before": 5.2,
+    "score_after": 0.8
+  },
+  {
+    "tone": "marketing",
+    "strength": "medium",
+    "operation": "synonym",
+    "source_text": "Our platform is a game-changer. It boasts a robust set of features and a seamless experience.",
+    "rewritten_text": "Our platform changes how the work gets done. It has a full set of features and a simple experience.",
+    "score_before": 4.4,
+    "score_after": 0.7
+  },
+  {
+    "tone": "marketing",
+    "strength": "heavy",
+    "operation": "split",
+    "source_text": "Nestled in the heart of the city, the venue offers a vibrant atmosphere and a breathtaking view.",
+    "rewritten_text": "The venue sits in the city center. It has a lively atmosphere and a striking view.",
+    "score_before": 5.8,
+    "score_after": 0.9
+  },
+  {
+    "tone": "storytelling",
+    "strength": "medium",
+    "operation": "clause",
+    "source_text": "She opened the letter slowly, her hands shaking. It was the answer she had waited for, and it changed everything.",
+    "rewritten_text": "Her hands shook as she opened the letter. It held the answer she had waited for.",
+    "score_before": 1.9,
+    "score_after": 0.4
+  },
+  {
+    "tone": "storytelling",
+    "strength": "light",
+    "operation": "punchy",
+    "source_text": "Here's the thing: the old bridge was still standing. That is the real win.",
+    "rewritten_text": "The old bridge was still standing. That mattered more than the ceremony.",
+    "score_before": 3.3,
+    "score_after": 0.5
+  }
+]

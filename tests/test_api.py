@@ -12,7 +12,7 @@ def test_removed_routes_are_gone(client) -> None:
     assert client.get("/api/meta").status_code == 404
     assert client.post("/api/diff", json={"original": "a", "rewritten": "b"}).status_code in {404, 405}
     assert client.get("/api/jobs").status_code == 404
-    assert client.get("/api/settings").status_code == 404
+    assert client.get("/api/settings").status_code == 200
 
 
 def test_humanize_response_shape(client) -> None:
@@ -28,9 +28,14 @@ def test_humanize_response_shape(client) -> None:
     )
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"rewritten", "sentences", "diff", "style_check", "report", "document_id"}
+    assert set(body) == {
+        "rewritten", "sentences", "diff", "style_check", "report",
+        "meta", "document_id", "version_id",
+    }
     assert body["rewritten"]
     assert body["sentences"]
+    assert body["meta"]["mode"] == "offline"
+    assert body["version_id"] > 0
     assert "segments" in body["diff"]
     check = body["style_check"]
     assert set(check) == {

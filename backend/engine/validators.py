@@ -35,6 +35,11 @@ _NAME_STOP = {
     "With", "Without", "You",
 }
 _DOUBLE = re.compile(r"\b(\w+)\s+\1\b", re.IGNORECASE)
+_PASSIVE_VOICE = re.compile(
+    r"\b(?:is|are|was|were|be|been|being)\s+(?:\w+(?:ed|en|wn|ught|de)\b|"
+    r"built|sent|found|made|given|shown|chosen)\b",
+    re.IGNORECASE,
+)
 _TERMINAL = re.compile(r"[.!?…][\"'”’)\]]*$")
 _WORDS_PATH = Path(__file__).resolve().parent / "data" / "words.json"
 _CONTENT_THRESHOLD = 0.9
@@ -201,6 +206,13 @@ def grammar_sanity(text: str) -> bool:
     return True
 
 
+def preserve_voice(source: str, candidate: str) -> bool:
+    """Grammatical voice is not converted. A passive source stays passive."""
+    return bool(_PASSIVE_VOICE.search(source or "")) == bool(
+        _PASSIVE_VOICE.search(candidate or "")
+    )
+
+
 def length_ratio(source: str, candidate: str) -> float:
     """Word-count ratio of candidate to source."""
     source_len = max(len(_words(source)), 1)
@@ -214,15 +226,18 @@ def validate(
     dropped_by_rule: Iterable[str] = (),
     length_min: float = _LENGTH_MIN,
     length_max: float = _LENGTH_MAX,
+    content_min: float = _CONTENT_THRESHOLD,
 ) -> tuple[bool, list[str]]:
     """Return (ok, reasons) for a candidate rewrite of one source unit."""
     reasons: list[str] = []
     if not preserve_critical(source, candidate):
         reasons.append("critical")
-    if content_retention(source, candidate, dropped_by_rule=dropped_by_rule) < _CONTENT_THRESHOLD:
+    if content_retention(source, candidate, dropped_by_rule=dropped_by_rule) < content_min:
         reasons.append("content")
     if not grammar_sanity(candidate):
         reasons.append("grammar")
+    if not preserve_voice(source, candidate):
+        reasons.append("voice")
     ratio = length_ratio(source, candidate)
     if ratio < length_min or ratio > length_max:
         reasons.append("length")

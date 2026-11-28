@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1] / "frontend" / "src"
-_STALE = ["api.meta", "api.diff", "providerSel", "progressFill", "renderSettings", "retryJob", "cancelJob"]
+_STALE = ["api.meta", "api.diff", "progressFill", "retryJob", "cancelJob"]
 
 
 def test_removed_feature_symbols_are_absent() -> None:

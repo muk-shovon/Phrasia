@@ -20,15 +20,6 @@ _RELATIVE = re.compile(r"^(.{4,90}?)\s+where\s+(.{4,90})$")
 _TAIL = re.compile(r"^(.+?),\s+(so|while)\s+(.+)$")
 _SOME = re.compile(r"^Some\s+(.+?),\s+while\s+others\s+(.+)$")
 _SPLIT = re.compile(r"^(.+?),\s+(so|while|but)\s+(.+)$|^([^;]+);\s*(.+)$")
-_PASSIVE_VERBS = {
-    "written": "wrote", "made": "made", "sent": "sent", "built": "built",
-    "shown": "showed", "chosen": "chose", "given": "gave", "found": "found",
-}
-_PASSIVE = re.compile(
-    r"^(The|A|An)?\s*([A-Za-z][A-Za-z\s]{0,40}?)\s+(is|are|was|were)\s+"
-    r"(written|made|sent|built|shown|chosen|given|found)\s+by\s+([A-Za-z][A-Za-z\s]{0,40}?)\.$",
-    re.IGNORECASE,
-)
 _PASSIVE_NEEDED = re.compile(
     r"^No\s+([A-Za-z][\w -]{1,50}?)\s+(?:is\s+|are\s+)?needed([.!?])$",
     re.IGNORECASE,
@@ -167,17 +158,6 @@ def merge_shared_subject(sentence: str, **context: Any) -> list[str]:
     return [f"{current} and {_soften(follow)}."]
 
 
-def passive_active(sentence: str, **_: Any) -> list[str]:
-    match = _PASSIVE.match(sentence.strip())
-    if not match:
-        return []
-    _article, subject, _aux, participle, actor = match.groups()
-    verb = _PASSIVE_VERBS.get(participle.lower())
-    if not verb:
-        return []
-    return [f"{actor.strip().capitalize()} {verb} {subject.strip().lower()}."]
-
-
 def passive_needed(sentence: str, **_: Any) -> list[str]:
     match = _PASSIVE_NEEDED.match(sentence.strip())
     if not match:
@@ -314,7 +294,6 @@ _TRANSFORMS: dict[str, Callable[..., list[str]]] = {
     "split_bridge": split_bridge,
     "some_others_split": some_others_split,
     "merge_shared_subject": merge_shared_subject,
-    "passive_active": passive_active,
     "passive_needed": passive_needed,
     "triad": triad,
     "contrast_restatement": contrast_restatement,

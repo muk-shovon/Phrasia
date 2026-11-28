@@ -20,14 +20,13 @@ CASES = [
     ("split-bridge", "Funding fell, so the plan changed.", "Funding fell. That means the plan changed.", "Funding fell."),
     ("some-others-split", "Some employees may feel alone, while others need time.", "Some employees may feel alone. Others need time.", "Employees need time."),
     ("merge-shared-subject", "Employees shared notes.", "Employees shared notes and employees planned." if False else "Employees shared notes and employees planned.", "Employees rested."),
-    ("passive-active", "The report was written by Ada.", "Ada wrote the report.", "Ada wrote the report yesterday."),
+    # Grammatical voice is never converted: no active↔passive rule exists.
     ("noun-phrase-verb", "They make a decision today.", "They decide today.", "They eat lunch."),
     ("opener", "In order to finish, the team worked late.", "To finish, the team worked late.", "The team worked late."),
     ("connective", "Furthermore, the plan worked.", "the plan worked.", "The plan worked."),
     ("contraction", "It is clear.", "It's clear.", "It is clear.", {"tone": "academic"}),
     ("phrase-swap", "They worked in order to finish.", "They rested."),
     ("skill-triad", "The plan covers speed, safety, and cost.", "The plan covers speed and cost."),
-    ("skill-passive-needed", "No configuration file needed.", "The file is ready."),
     ("synonym", "This is important.", "This is key.", "This is fine.", {"seed": "abc"}),
 ]
 

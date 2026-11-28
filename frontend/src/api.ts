@@ -1,11 +1,14 @@
 import type {
+  AppSettings,
   DetectorReport,
   DocumentDetail,
   DocumentSummary,
   HumanizePayload,
   HumanizeResult,
+  JobStatus,
   PlagiarismReport,
   Reference,
+  SentenceResult,
 } from "./types";
 
 export class ApiError extends Error {
@@ -63,6 +66,38 @@ function slug(title: string): string {
 export const api = {
   humanize: (payload: HumanizePayload) =>
     request<HumanizeResult>("/api/humanize", json("POST", payload)),
+
+  startJob: (payload: HumanizePayload) =>
+    request<{ job_id: string; status: string }>("/api/humanize/jobs", json("POST", payload)),
+  job: (id: string) => request<JobStatus>(`/api/humanize/jobs/${id}`),
+  rehumanize: (payload: {
+    text: string; tone: string; strength: string; provider: string;
+    replace_dashes: boolean; straight_quotes: boolean;
+  }) => request<SentenceResult>("/api/humanize/sentence", json("POST", payload)),
+  feedback: (payload: {
+    action: "accepted" | "rejected" | "edited";
+    version_id: number | null;
+    sentence_idx: number | null;
+    source_text: string;
+    final_text: string;
+    tone: string;
+    strength: string;
+    operation?: string;
+  }) => request<{ id: number; saved_example: boolean }>("/api/feedback", json("POST", payload)),
+
+  settings: () => request<AppSettings>("/api/settings"),
+  saveSettings: (patch: Record<string, unknown>) =>
+    request<AppSettings>("/api/settings", { method: "PUT", body: JSON.stringify(patch) }),
+  saveKey: (provider: string, apiKey: string) =>
+    request<{ saved: boolean }>("/api/settings/keys", json("POST", { provider, api_key: apiKey })),
+  removeKey: (provider: string) =>
+    request<{ deleted: boolean }>(`/api/settings/keys/${provider}`, { method: "DELETE" }),
+  testProvider: (provider: string, apiKey?: string) =>
+    request<{
+      ok: boolean; provider: string; model?: string; latency_ms?: number; error?: string;
+    }>("/api/settings/test", json("POST", { provider, api_key: apiKey || null })),
+  clearCache: () =>
+    request<{ deleted: number }>("/api/settings/cache/clear", { method: "POST" }),
 
   documents: (limit = 100) =>
     request<{ documents: DocumentSummary[] }>(`/api/documents?limit=${limit}`),

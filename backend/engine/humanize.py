@@ -136,7 +136,23 @@ def _realign(
     return records
 
 
-def rewrite(
+def _summarise(records: list[dict[str, Any]]) -> dict[str, int]:
+    restructured = sum(1 for record in records if record["status"] == "restructured")
+    lexical = sum(1 for record in records if record["status"] == "lexical")
+    unchanged = sum(1 for record in records if record["status"] == "unchanged")
+    scores = [float(record["similarity"]) for record in records]
+    return {
+        "sentences_total": len(records),
+        "sentences_restructured": restructured,
+        "sentences_lexical": lexical,
+        "sentences_unchanged": unchanged,
+        "unchanged_sentences": unchanged,
+        "low_change_sentences": sum(1 for record in records if "low-change" in record["flags"]),
+        "average_change_pct": round(100 * sum(1 - score for score in scores) / max(len(scores), 1)),
+    }
+
+
+def _rewrite_offline(
     text: str,
     *,
     tone: str = "casual",
@@ -316,21 +332,243 @@ def rewrite(
         reason=skill_report["reason"],
     )
     records = _realign(source_text, final_text, skill_report["dropped_by_rule"])
-    restructured = sum(1 for record in records if record["status"] == "restructured")
-    lexical = sum(1 for record in records if record["status"] == "lexical")
-    unchanged = sum(1 for record in records if record["status"] == "unchanged")
-    scores = [float(record["similarity"]) for record in records]
     return {
         "text": final_text,
         "records": records,
         "report": report,
-        "summary": {
-            "sentences_total": len(records),
-            "sentences_restructured": restructured,
-            "sentences_lexical": lexical,
-            "sentences_unchanged": unchanged,
-            "unchanged_sentences": unchanged,
-            "low_change_sentences": sum(1 for record in records if "low-change" in record["flags"]),
-            "average_change_pct": round(100 * sum(1 - score for score in scores) / max(len(scores), 1)),
+        "summary": _summarise(records),
+        "meta": {
+            "mode": "offline",
+            "provider": "",
+            "model": "",
+            "provider_order": [],
+            "rounds": 0,
+            "cache_hits": 0,
+            "kept_chunks": 0,
+            "density_before": 0.0,
+            "density_after": 0.0,
+            "fallback_used": False,
+            "errors": [],
         },
+    }
+
+
+def _online_rewrite(
+    source_text: str,
+    *,
+    tone: str,
+    strength: str,
+    intensity: str,
+    options: dict[str, Any],
+    chain: Any,
+    offline_fallback: bool,
+    on_progress: Any,
+) -> dict[str, Any]:
+    """Rewrite with hosted passes, then apply the local safety pass."""
+    from backend.engine.llm import LLMUnavailable, rewrite_document
+    from backend.engine.llm import retrieval
+    from backend.engine.llm import settings as provider_settings
+
+    settings = provider_settings.load_settings()
+    examples = retrieval.retrieve(tone, strength, source_text, 4)
+
+    def emit(stage: str, current: int, total: int, message: str) -> None:
+        if on_progress is not None:
+            try:
+                on_progress(stage, current, total, message)
+            except Exception:
+                pass
+
+    try:
+        prepared, llm_meta, sentence_report = rewrite_document(
+            chain,
+            source_text,
+            tone=tone,
+            strength=strength,
+            intensity=intensity,
+            options=options,
+            examples=examples,
+            target_density=float(settings["target_density"]),
+            on_progress=emit,
+        )
+    except LLMUnavailable:
+        raise
+
+    total_passes = int(llm_meta.get("rounds", 1))
+    emit("skill", total_passes, total_passes, "Scanning the catalog and applying safe edits")
+    found = skill_scan.scan(source_text, options)
+    prepared_found = skill_scan.scan(prepared, options)
+    final_text, skill_report = apply_skill(prepared, options, found=prepared_found)
+    remaining = skill_scan.survivors(final_text, found, options)
+    report = build_report(
+        source_text,
+        final_text,
+        found,
+        remaining,
+        dropped_by_rule=skill_report["dropped_by_rule"],
+        reason=skill_report["reason"],
+    )
+    records = _realign(source_text, final_text, skill_report["dropped_by_rule"])
+    _attach_operations(records, sentence_report)
+    return {
+        "text": final_text,
+        "records": records,
+        "report": report,
+        "summary": _summarise(records),
+        "meta": {
+            **llm_meta,
+            "mode": "online",
+            "intensity": intensity,
+            "fallback_used": False,
+            "examples_used": len(examples),
+        },
+    }
+
+
+def _attach_operations(
+    records: list[dict[str, Any]], report: list[dict[str, Any]]
+) -> None:
+    """Copy operation and validator details onto the aligned sentence records."""
+    by_source: dict[str, dict[str, Any]] = {}
+    for row in report:
+        key = _sentence_key(str(row.get("source", "")))
+        if key:
+            by_source.setdefault(key, row)
+    for record in records:
+        row = by_source.get(_sentence_key(str(record.get("source", ""))))
+        if row is None:
+            continue
+        record["operation"] = row.get("operation", "keep")
+        record["operation_label"] = row.get("operation_label", "Nearly unchanged")
+        record["validator"] = row.get("validator", "passed")
+        record["meaning_score"] = row.get("meaning_score", 0.0)
+        record["rules"] = list(row.get("rules", []))
+        remaining = list(row.get("flags", []))
+        record["remaining_flags"] = remaining
+        record["flags"] = list(dict.fromkeys(record.get("flags", []) + remaining))
+
+
+def rewrite(
+    text: str,
+    *,
+    tone: str = "casual",
+    strength: str = "medium",
+    variation: int = 0,
+    preserve_formatting: bool = True,
+    clean_invisible: bool = True,
+    replace_dashes: bool = True,
+    straight_quotes: bool = True,
+    intensity: str | None = None,
+    provider: str = "auto",
+    mode: str = "auto",
+    offline_fallback: bool = True,
+    on_progress: Any = None,
+) -> dict[str, Any]:
+    """Rewrite online when a provider is configured, otherwise locally.
+
+    ``mode`` accepts ``auto``, ``online`` or ``offline``. In online mode the
+    local rule engine stays in the loop as the safety pass and as the fallback.
+    """
+    level = (intensity or strength or "medium").strip().lower()
+    if level not in {"light", "medium", "heavy", "ninja"}:
+        level = "medium"
+    offline_strength = strength if strength in {"light", "medium", "heavy"} else "heavy"
+    local = {
+        "tone": tone,
+        "strength": offline_strength,
+        "variation": variation,
+        "preserve_formatting": preserve_formatting,
+        "clean_invisible": clean_invisible,
+        "replace_dashes": replace_dashes,
+        "straight_quotes": straight_quotes,
+    }
+    options = {"replace_dashes": replace_dashes, "straight_quotes": straight_quotes}
+
+    if mode == "offline":
+        return _rewrite_offline(text, **local)
+
+    from backend.engine.llm import build_chain
+
+    chain = build_chain(provider)
+    if not chain.available:
+        if mode == "online" and not offline_fallback:
+            raise ValueError(
+                "No hosted provider is configured. Add a key on the Settings page "
+                "or enable the offline fallback."
+            )
+        return _rewrite_offline(text, **local)
+
+    source_text = clean.clean(text or "") if clean_invisible else (text or "")
+    if not source_text.strip():
+        raise ValueError("Text is empty.")
+
+    try:
+        return _online_rewrite(
+            source_text,
+            tone=tone,
+            strength="heavy" if level == "ninja" else level,
+            intensity=level,
+            options=options,
+            chain=chain,
+            offline_fallback=offline_fallback,
+            on_progress=on_progress,
+        )
+    except Exception as exc:
+        from backend.engine.llm import LLMUnavailable
+
+        if not isinstance(exc, LLMUnavailable):
+            raise
+        if not offline_fallback:
+            raise
+        result = _rewrite_offline(text, **local)
+        result["meta"] = {
+            **result["meta"],
+            "fallback_used": True,
+            "fallback_reason": "providers unavailable",
+            "errors": exc.errors,
+        }
+        if on_progress is not None:
+            try:
+                on_progress("fallback", 1, 1, "Hosted providers failed; using the local engine")
+            except Exception:
+                pass
+        return result
+
+
+def rewrite_sentence(
+    text: str,
+    *,
+    tone: str = "casual",
+    strength: str = "medium",
+    provider: str = "auto",
+    replace_dashes: bool = True,
+    straight_quotes: bool = True,
+) -> dict[str, Any]:
+    """Re-humanize one flagged sentence, online when possible."""
+    source = (text or "").strip()
+    if not source:
+        raise ValueError("Text is empty.")
+    options = {"replace_dashes": replace_dashes, "straight_quotes": straight_quotes}
+    from backend.engine.llm import build_chain
+
+    chain = build_chain(provider)
+    if chain.available:
+        from backend.engine.llm import rewrite_single
+
+        try:
+            rewritten, meta = rewrite_single(
+                chain, source, tone=tone, strength=strength, options=options,
+            )
+        except Exception:
+            rewritten, meta = source, {"mode": "offline", "fallback_used": True}
+    else:
+        rewritten, meta = source, {"mode": "offline", "fallback_used": False}
+    try:
+        polished, report = apply_skill(rewritten, options)
+    except Exception:
+        polished, report = rewritten, {}
+    return {
+        "text": polished,
+        "report": report,
+        "meta": meta,
     }

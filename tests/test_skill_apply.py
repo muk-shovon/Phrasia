@@ -78,7 +78,7 @@ def test_tier_b_candidates_use_the_ranker() -> None:
         "No configuration file needed. The report is high-quality. It could potentially work.",
         strength="heavy",
     )
-    assert passive["text"].startswith("You do not need a configuration file.")
+    assert passive["text"].startswith("No configuration file needed.")
 
 
 def test_tier_c_is_unchanged_and_needs_review() -> None:

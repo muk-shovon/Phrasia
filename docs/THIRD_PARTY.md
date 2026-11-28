@@ -1,5 +1,12 @@
 # Third-party notices
 
+## rudra496/StealthHumanizer
+
+- Project: [rudra496/StealthHumanizer](https://github.com/rudra496/StealthHumanizer)
+- Version referenced: `main` at study time (2026)
+- License: MIT
+- Used for: studied multi-pass humanization pipeline, prompt engineering, protected-region masking, post-processing, style presets, intensity rounds, semantic-fidelity checks, and re-humanize-flagged-sentences logic. Summarized in [`docs/NOTES.md`](NOTES.md). No code is copied; the Python implementation in Phrasia is original. The upstream `VoicePrint` feature is not used and Phrasia has no voice feature.
+
 ## blader/humanizer
 
 - Project: [blader/humanizer](https://github.com/blader/humanizer)

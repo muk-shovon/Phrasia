@@ -1,1 +1,29 @@
-Historical document written during the refactor. See README.md for the current state.
+# Notes: StealthHumanizer, studied for the online-first pipeline
+
+Source project: [rudra496/StealthHumanizer](https://github.com/rudra496/StealthHumanizer), MIT licensed.
+Phrasia does not copy its code. It studies the layering, re-expresses the ideas, and keeps its own rule engine, validators, and 26-section `ai_patterns.json` catalog. We already used `blader/humanizer` for that catalog. The cloned upstream `VoicePrint` feature is ignored; Phrasia has no voice feature.
+
+## What each layer does in StealthHumanizer
+
+1. **Protected regions first** (`lib/protect-regions.ts`). Code fences, inline code, links, images, bare URLs, emails, mentions, hashtags and blockquotes are swapped for `__PROTECT_N__` placeholders before any model call or post-processing. They are restored verbatim at the end. Phrasia uses the same idea with `[PHRASIA_PROTECT_N]`. Phrasia additionally protects citations, quoted lines and measured numbers.
+2. **Style-aware prompt assembly** (`lib/prompts.ts`). A core anti-detection instruction plus a style overlay. Tone presets (`academic-formal`, `journalistic`, `creative-writing`, `conversational`, `professional`, `persuasive`, `storytelling`, ...), style presets (`humanize`, `academic`, `casual`, `professional`, `creative`, `technical`, `stealth`), level instructions, explicit banned AI vocabulary, length and structure anchors, a self-check prompt, a fix prompt, and a re-humanize prompt. Freeze words preserve exact phrases. A `buildSamplePrompt` adds a writing sample. The separate upstream `VoicePrint` feature is not adopted. Phrasia uses editable `backend/engine/llm/prompts/*.md` and passes a banned-phrase list from its own scanner.
+3. **Chunking**. Long texts are split at sentence boundaries (max ~2,500 words per chunk). Phrasia is stricter: no chunked whole-document call. One call rewrites one sentence or one adjacent pair.
+4. **Pass 1, one model call for the chunk** (`humanizeChunk`). Phrasia instead rewrites sentence-by-sentence.
+5. **Deterministic post-processing** (`lib/postprocess.ts`). A `light` mode is used after rewriting so it does not break order. Sub-layers in upstream: `swapSynonyms`, `addTypographicVariation`, sentence reordering, strip AI em-dashes, punctuation noise, sentence-length manipulation, `ensureBurstiness`, perplexity injection, paragraph randomization, `aggressiveSynonymSwap`, `softenStiffOpeners`, `disruptFlow`, `stripLLMPreamble`, corpus-aware `corpusAwarePostprocess`. Phrasia keeps its own safety pass instead of punctuation noise and randomization, because it validates meaning rather than scoring detector evasion.
+6. **Local detection scoring** (`lib/detector.ts`). Twelve heuristic signals: sentence average, perplexity, burstiness, vocabulary diversity, sentence-length variation, transition frequency, passive-voice ratio, AI-phrase density, sentence-start diversity, pronoun usage, hedging frequency, quantifier overuse. Phrasia scores only its own 26-section pattern catalog and adds length/burstiness/opener/hedge/pronoun fingerprints. It does not claim a detector score.
+7. **Multi-pass re-humanize**. After pass 1, `detectAI` scores every sentence. Pass 2+ re-humanizes only sentences classified `ai` or `maybe`, re-checks, and stops at a target score. `getRehumanizePrompt` requires one complete grammatical sentence per input, no fragments, no repeated openers, no em-dashes, exact facts. Upstream `maxPasses = 3`; its `Light/Medium/Aggressive/Ninja` map to round counts. Phrasia uses `light=1`, `medium=2`, `heavy=3`, `ninja=4` total rounds and rescoring of the whole text with only flagged sentences retried.
+8. **Semantic fidelity** (`lib/semantic-fidelity.ts`). `assessSemanticFidelity`: token unigram and bigram cosine, keyword recall, length ratio, sentence alignment, entity/number/URL/email/code/markdown/protected-token recall, negation consistency. Verdict `preserved/review/drift`. Phrasia uses `backend/engine/validators.py`, protected-span restore, critical checks, hedge/negation preservation, length drift, grammar, and a cheap second LLM YES/NO check, with an offline token+bigram cosine fallback.
+9. **Provider layer** (`lib/providers.ts`, `lib/server/providers-runtime.ts`). Unified `generateWithProvider`. OpenAI-compatible providers (Groq, Together, OpenRouter, DeepInfra, Cerebras, Mistral...) plus Gemini, Claude, Cohere, HuggingFace, Cloudflare. Phrasia implements `LLMProvider.rewrite(system, user, params)`, one OpenAI-compatible class plus Gemini, fallback chain on timeout/429/5xx, backoff retries, server-side keys. No local model is downloaded.
+10. **Validation layer** (`lib/validation.ts`). Output structure checks. Phrasia keeps its existing `validators.validate`, then retries once with a stricter prompt, then keeps the original sentence.
+11. **Per-sentence rewrite**. Upstream re-humanize accepts a list of flagged sentences in one call. Phrasia does one sentence or adjacent pair per call and returns `original`, `final`, `operation`, `validator`, `remaining_flags`.
+12. **Rehumanize** (`app/api/rehumanize`, `lib/rehumanize.ts`). A single sentence or short passage refresh. Phrasia exposes `/api/humanize/sentence` and per-sentence re-humanize/revert in the UI.
+13. **Cache** (`lib/cache`). Caching. Phrasia caches in `llm_cache`, keyed by provider, model, temperature, max_tokens, system and user, which includes `(sentence, operation, tone, strength)`.
+14. **Feedback / learning**. Upstream keeps history and version history; Part A removed voice prints. Phrasia stores `example_pairs` and `feedback`, retrieves top-rated pairs for the same tone/operation, seeds a small set, and stores accepted/edited rewrites. No style profiles.
+
+## What Phrasia changes
+
+- It never changes grammatical voice. No active<->passive.
+- Some sentences must stay nearly untouched.
+- It targets a natural short/medium/long mix instead of equal lengths.
+- It keeps the offline rule engine as pre/post-processing, validator and fallback.
+- It is online-first only when a key exists; otherwise the same deterministic engine runs unchanged.

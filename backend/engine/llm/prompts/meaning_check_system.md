@@ -1,0 +1,1 @@
+You check whether two sentences carry the same meaning. Reply with one word only: YES if the rewrite keeps every fact, quantity, name, negation and claim; NO if anything was added, dropped, weakened, strengthened or reversed.

@@ -98,6 +98,12 @@ export interface SentenceRecord {
   restructured: boolean;
   flags: string[];
   allowed_drop?: boolean;
+  operation?: string;
+  operation_label?: string;
+  validator?: string;
+  meaning_score?: number;
+  remaining_flags?: string[];
+  index?: number;
 }
 
 export interface StyleCheck {
@@ -114,6 +120,74 @@ export interface HumanizePayload {
   clean_invisible: boolean;
   replace_dashes: boolean;
   straight_quotes: boolean;
+  intensity?: string;
+  provider?: string;
+  mode?: "auto" | "online" | "offline";
+  offline_fallback?: boolean;
+}
+
+export interface HumanizeMeta {
+  mode: "online" | "offline";
+  provider: string;
+  model: string;
+  provider_order?: string[];
+  rounds: number;
+  rounds_requested?: number;
+  cache_hits?: number;
+  kept_chunks?: number;
+  density_before: number;
+  density_after: number;
+  fallback_used: boolean;
+  fallback_reason?: string;
+  examples_used?: number;
+  errors: { provider: string; error: string; status?: number | null }[];
+}
+
+export interface ProviderInfo {
+  id: string;
+  label: string;
+  note: string;
+  docs_url: string;
+  env_keys: string[];
+  protocol: string;
+  base_url: string;
+  default_model: string;
+  model: string;
+  configured: boolean;
+  key_source: string | null;
+}
+
+export interface AppSettings {
+  enabled: boolean;
+  provider_order: string[];
+  models: Record<string, string>;
+  preferred_provider: string;
+  offline_fallback: boolean;
+  temperature: number;
+  max_tokens: number;
+  timeout_seconds: number;
+  target_density: number;
+  providers: ProviderInfo[];
+  config_path: string;
+  secrets_path: string;
+}
+
+export interface JobStatus {
+  job_id: string;
+  status: "queued" | "running" | "done" | "error";
+  stage: string;
+  current: number;
+  total: number;
+  message: string;
+  error: string | null;
+  code: string;
+  result?: HumanizeResult;
+}
+
+export interface SentenceResult {
+  text: string;
+  report: SkillReport;
+  meta: HumanizeMeta;
 }
 
 export interface SkillSectionReport {
@@ -150,5 +224,7 @@ export interface HumanizeResult {
   diff: { segments: DiffSegment[]; changed: number; review: number };
   style_check: StyleCheck;
   report: SkillReport;
+  meta: HumanizeMeta;
   document_id: number;
+  version_id: number;
 }

@@ -5,6 +5,7 @@ import { renderDetector } from "./pages/detector";
 import { renderHistory } from "./pages/history";
 import { renderHumanize } from "./pages/humanize";
 import { renderPlagiarism } from "./pages/plagiarism";
+import { renderSettings } from "./pages/settings";
 
 type Page = (root: HTMLElement) => Promise<void>;
 
@@ -21,6 +22,7 @@ const ROUTES: Route[] = [
   { hash: "#/plagiarism", label: "Plagiarism",   helper: "Local reference check", icon: ICONS.plagiarism, page: renderPlagiarism },
   { hash: "#/detector",   label: "Style Signal", helper: "Pattern highlights",  icon: ICONS.detector,   page: renderDetector },
   { hash: "#/history",    label: "History",      helper: "Documents and versions", icon: ICONS.history,  page: renderHistory },
+  { hash: "#/settings",   label: "Settings",     helper: "Providers and keys", icon: ICONS.settings, page: renderSettings },
 ];
 
 const DEFAULT_HASH = "#/humanize";
@@ -96,8 +98,8 @@ function buildSidebar(activeHash: string): void {
 
   // Footer
   const footer = el("div", "sidebar-footer");
-  footer.append(el("div", "", "Local, private, single-owner."));
-  footer.append(el("div", "mt-1 text-[#88994f]/80", "Your writing stays on this machine."));
+  footer.append(el("div", "", "Online-first, local fallback."));
+  footer.append(el("div", "mt-1 text-[#88994f]/80", "Only the text you rewrite is sent."));
   sidebar.append(footer);
 }
 
